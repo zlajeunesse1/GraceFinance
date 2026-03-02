@@ -1,0 +1,53 @@
+# GraceFinance - Dark/Light Mode Update
+# ========================================
+# Copy-paste these commands in PowerShell to replace your files.
+# Run from: C:\Users\Zlaje\Downloads\GRACEFINANCE
+
+# ──────────────────────────────────────────
+# FILES TO REPLACE (8 total)
+# ──────────────────────────────────────────
+#
+# src/context/ThemeContext.jsx   ← NEW: dark/light only (replaces 7-theme version)
+# src/components/Logo.jsx        ← NEW: SVG paw with 4 toes + heart pad
+# src/components/SocialAuth.jsx  ← NEW: proper Google/Apple SVG icons
+# src/components/ModeToggle.jsx  ← NEW: sun/moon toggle button
+# src/components/Input.jsx       ← NEW: theme-aware input field
+# src/components/AuthLayout.jsx  ← NEW: simplified layout (no particles)
+# src/pages/Login.jsx            ← NEW: clean login page
+# src/pages/Signup.jsx           ← NEW: clean signup page
+# src/pages/ForgotPassword.jsx   ← NEW: clean forgot password page
+# src/App.jsx                    ← UPDATED: ThemeProvider wraps everything
+#
+# ──────────────────────────────────────────
+# FILES YOU CAN DELETE
+# ──────────────────────────────────────────
+#
+# src/components/ParticleBackground.jsx  ← no longer needed
+# src/components/ThemePicker.jsx         ← replaced by ModeToggle.jsx
+#
+# ──────────────────────────────────────────
+# WHAT STAYS THE SAME
+# ──────────────────────────────────────────
+#
+# src/pages/Dashboard.jsx        ← keep your existing dashboard
+# src/context/AuthContext.jsx     ← keep your existing auth state
+# tailwind.config.js              ← keep as-is (CSS vars now set by ThemeContext)
+# vite.config.js                  ← no changes needed
+# index.html                     ← no changes needed
+# Backend (FastAPI)               ← no changes needed
+#
+# ──────────────────────────────────────────
+# IMPORTANT NOTE
+# ──────────────────────────────────────────
+#
+# Your Dashboard.jsx may still import the old useTheme format.
+# The new useTheme() returns: { mode, setMode, t, themes }
+#
+# Old way:  const { theme } = useTheme()    then theme.accent
+# New way:  const { t } = useTheme()        then t.accent
+#
+# So in Dashboard.jsx, find/replace:
+#   const { theme } = useTheme()  →  const { t } = useTheme()
+#   theme.  →  t.
+#
+# Or if your dashboard uses ctx.theme, change to ctx.t
