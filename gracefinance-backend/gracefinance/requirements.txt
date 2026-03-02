@@ -1,0 +1,32 @@
+# GraceFinance Backend Dependencies
+# Install: pip install -r requirements.txt
+
+# Core
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-dotenv==1.0.1
+
+# Database
+sqlalchemy==2.0.35
+psycopg2-binary==2.9.9
+alembic==1.13.2
+
+# Authentication
+pyjwt==2.9.0
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+
+# Payments
+stripe==10.12.0
+
+# AI (Claude)
+anthropic==0.37.1
+
+# Utilities
+pydantic==2.9.2
+pydantic-settings==2.5.2
+httpx==0.27.2
+
+# Development
+pytest==8.3.3
+pytest-asyncio==0.24.0

@@ -1,0 +1,860 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "total_questions": 500,
+    "target_questions": 5000,
+    "last_updated": "2026-02-10",
+    "description": "GraceFinance Daily Money Psychology Question Database"
+  },
+  "question_categories": {
+    "money_stress": {
+      "weight": 0.25,
+      "description": "Questions about financial anxiety, stress, and concerns"
+    },
+    "money_goals": {
+      "weight": 0.20,
+      "description": "Questions about financial aspirations and objectives"
+    },
+    "spending_habits": {
+      "weight": 0.20,
+      "description": "Questions about spending patterns and triggers"
+    },
+    "financial_confidence": {
+      "weight": 0.15,
+      "description": "Questions about self-efficacy and money management confidence"
+    },
+    "money_mindset": {
+      "weight": 0.10,
+      "description": "Questions about beliefs, values, and emotional relationship with money"
+    },
+    "life_context": {
+      "weight": 0.10,
+      "description": "Questions about current life situations affecting finances"
+    }
+  },
+  "question_types": {
+    "scale": "1-10 rating scale",
+    "multiple_choice": "Select one or more options",
+    "open_text": "Short text response",
+    "yes_no": "Binary choice",
+    "slider": "Sliding scale with labels"
+  },
+  "life_stages": [
+    "student",
+    "young_professional",
+    "established_career",
+    "parent",
+    "homeowner",
+    "renter",
+    "pre_retirement",
+    "retired",
+    "entrepreneur"
+  ],
+  "questions": [
+    {
+      "id": "MS001",
+      "category": "money_stress",
+      "question": "On a scale of 1-10, how stressed do you feel about money right now?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Completely calm",
+        "5": "Moderate stress",
+        "10": "Extremely stressed"
+      },
+      "life_stages": ["all"],
+      "tags": ["anxiety", "current_state", "emotional_check"],
+      "follow_up_potential": true
+    },
+    {
+      "id": "MS002",
+      "category": "money_stress",
+      "question": "What's your biggest financial worry this week?",
+      "type": "multiple_choice",
+      "options": [
+        "Paying rent/mortgage",
+        "Credit card bills",
+        "Unexpected expenses",
+        "Not saving enough",
+        "Job security",
+        "Student loans",
+        "Nothing major right now"
+      ],
+      "life_stages": ["all"],
+      "tags": ["immediate_concerns", "priorities"]
+    },
+    {
+      "id": "MS003",
+      "category": "money_stress",
+      "question": "How often do you lose sleep thinking about money?",
+      "type": "multiple_choice",
+      "options": [
+        "Never",
+        "Rarely (once a month or less)",
+        "Sometimes (a few times a month)",
+        "Often (weekly)",
+        "Very often (multiple times a week)"
+      ],
+      "life_stages": ["all"],
+      "tags": ["anxiety", "sleep", "mental_health"]
+    },
+    {
+      "id": "MS004",
+      "category": "money_stress",
+      "question": "When was the last time you checked your bank balance?",
+      "type": "multiple_choice",
+      "options": [
+        "Within the last hour",
+        "Today",
+        "This week",
+        "This month",
+        "I avoid checking it"
+      ],
+      "life_stages": ["all"],
+      "tags": ["avoidance", "awareness", "habits"]
+    },
+    {
+      "id": "MS005",
+      "category": "money_stress",
+      "question": "Do you feel more stressed about money at certain times of the month?",
+      "type": "yes_no",
+      "follow_up": "When is that? (beginning/middle/end of month)",
+      "life_stages": ["all"],
+      "tags": ["patterns", "timing", "bill_cycles"]
+    },
+    {
+      "id": "MS006",
+      "category": "money_stress",
+      "question": "How comfortable are you with your current emergency fund situation?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "No emergency fund, very worried",
+        "5": "Some savings, could be better",
+        "10": "Well-funded, feel secure"
+      },
+      "life_stages": ["all"],
+      "tags": ["emergency_fund", "security", "preparedness"]
+    },
+    {
+      "id": "MS007",
+      "category": "money_stress",
+      "question": "What financial scenario keeps you up at night?",
+      "type": "multiple_choice",
+      "options": [
+        "Losing my job",
+        "Medical emergency",
+        "Car breaking down",
+        "Not being able to retire",
+        "Disappointing loved ones",
+        "Never owning a home",
+        "Being in debt forever"
+      ],
+      "life_stages": ["all"],
+      "tags": ["fears", "worst_case", "anxiety"]
+    },
+    {
+      "id": "MS008",
+      "category": "money_stress",
+      "question": "How often do you argue with your partner/family about money?",
+      "type": "multiple_choice",
+      "options": [
+        "Never",
+        "Rarely",
+        "Sometimes",
+        "Often",
+        "Very often",
+        "Not applicable"
+      ],
+      "life_stages": ["all"],
+      "tags": ["relationships", "conflict", "communication"]
+    },
+    {
+      "id": "MS009",
+      "category": "money_stress",
+      "question": "Do you feel anxious when thinking about opening bills?",
+      "type": "yes_no",
+      "life_stages": ["all"],
+      "tags": ["avoidance", "anxiety", "bills"]
+    },
+    {
+      "id": "MS010",
+      "category": "money_stress",
+      "question": "Rate your stress level about upcoming bills in the next 2 weeks",
+      "type": "scale",
+      "scale_labels": {
+        "1": "No stress at all",
+        "5": "Some concern",
+        "10": "Major anxiety"
+      },
+      "life_stages": ["all"],
+      "tags": ["bills", "short_term", "immediate"]
+    },
+    {
+      "id": "MG001",
+      "category": "money_goals",
+      "question": "If money wasn't an issue, what would you do in the next 6 months?",
+      "type": "open_text",
+      "max_characters": 200,
+      "life_stages": ["all"],
+      "tags": ["dreams", "aspirations", "priorities"]
+    },
+    {
+      "id": "MG002",
+      "category": "money_goals",
+      "question": "What's your #1 financial goal right now?",
+      "type": "multiple_choice",
+      "options": [
+        "Build emergency fund",
+        "Pay off debt",
+        "Save for a home",
+        "Invest more",
+        "Increase income",
+        "Save for vacation",
+        "Start a business",
+        "Retire early"
+      ],
+      "life_stages": ["all"],
+      "tags": ["priorities", "objectives", "focus"]
+    },
+    {
+      "id": "MG003",
+      "category": "money_goals",
+      "question": "How clear are you about your financial goals?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Very unclear, no real plan",
+        "5": "Somewhat clear, working on it",
+        "10": "Crystal clear, detailed plan"
+      },
+      "life_stages": ["all"],
+      "tags": ["clarity", "planning", "direction"]
+    },
+    {
+      "id": "MG004",
+      "category": "money_goals",
+      "question": "In 5 years, what does financial success look like for you?",
+      "type": "open_text",
+      "max_characters": 200,
+      "life_stages": ["all"],
+      "tags": ["long_term", "vision", "success_definition"]
+    },
+    {
+      "id": "MG005",
+      "category": "money_goals",
+      "question": "Are you currently working toward a specific savings goal?",
+      "type": "yes_no",
+      "follow_up": "What is it?",
+      "life_stages": ["all"],
+      "tags": ["savings", "goals", "action"]
+    },
+    {
+      "id": "MG006",
+      "category": "money_goals",
+      "question": "How motivated do you feel about your financial goals today?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Not motivated at all",
+        "5": "Moderately motivated",
+        "10": "Extremely motivated"
+      },
+      "life_stages": ["all"],
+      "tags": ["motivation", "energy", "current_state"]
+    },
+    {
+      "id": "MG007",
+      "category": "money_goals",
+      "question": "What's preventing you from reaching your financial goals?",
+      "type": "multiple_choice",
+      "options": [
+        "Not earning enough",
+        "Too much debt",
+        "Unexpected expenses",
+        "Lack of discipline",
+        "Don't know where to start",
+        "Family obligations",
+        "Nothing, I'm on track"
+      ],
+      "life_stages": ["all"],
+      "tags": ["obstacles", "barriers", "challenges"]
+    },
+    {
+      "id": "MG008",
+      "category": "money_goals",
+      "question": "How often do you review your financial goals?",
+      "type": "multiple_choice",
+      "options": [
+        "Daily",
+        "Weekly",
+        "Monthly",
+        "A few times a year",
+        "Rarely",
+        "Never set formal goals"
+      ],
+      "life_stages": ["all"],
+      "tags": ["habits", "tracking", "accountability"]
+    },
+    {
+      "id": "MG009",
+      "category": "money_goals",
+      "question": "Do you have a target amount for your emergency fund?",
+      "type": "yes_no",
+      "follow_up": "What's your target? (3 months, 6 months, 12 months of expenses)",
+      "life_stages": ["all"],
+      "tags": ["emergency_fund", "planning", "goals"]
+    },
+    {
+      "id": "MG010",
+      "category": "money_goals",
+      "question": "Which financial milestone would make you feel most proud?",
+      "type": "multiple_choice",
+      "options": [
+        "Being debt-free",
+        "Buying a home",
+        "Reaching $10k in savings",
+        "Reaching $100k net worth",
+        "Quitting my job to pursue passion",
+        "Fully funding retirement",
+        "Helping family financially"
+      ],
+      "life_stages": ["all"],
+      "tags": ["milestones", "pride", "aspirations"]
+    },
+    {
+      "id": "SH001",
+      "category": "spending_habits",
+      "question": "When do you tend to overspend most?",
+      "type": "multiple_choice",
+      "options": [
+        "When I'm stressed",
+        "When I'm bored",
+        "When I'm celebrating",
+        "When I'm with friends",
+        "After payday",
+        "During sales/deals",
+        "I don't tend to overspend"
+      ],
+      "life_stages": ["all"],
+      "tags": ["triggers", "patterns", "awareness"]
+    },
+    {
+      "id": "SH002",
+      "category": "spending_habits",
+      "question": "How often do you make impulse purchases?",
+      "type": "multiple_choice",
+      "options": [
+        "Never",
+        "Rarely (once a month)",
+        "Sometimes (a few times a month)",
+        "Often (weekly)",
+        "Very often (multiple times a week)"
+      ],
+      "life_stages": ["all"],
+      "tags": ["impulse", "control", "frequency"]
+    },
+    {
+      "id": "SH003",
+      "category": "spending_habits",
+      "question": "What's your go-to comfort purchase?",
+      "type": "multiple_choice",
+      "options": [
+        "Food/Takeout",
+        "Clothes/Fashion",
+        "Entertainment/Streaming",
+        "Tech/Gadgets",
+        "Books/Education",
+        "Beauty/Self-care",
+        "Travel/Experiences",
+        "I don't comfort shop"
+      ],
+      "life_stages": ["all"],
+      "tags": ["comfort", "emotional_spending", "categories"]
+    },
+    {
+      "id": "SH004",
+      "category": "spending_habits",
+      "question": "Do you feel guilty after making purchases?",
+      "type": "multiple_choice",
+      "options": [
+        "Never",
+        "Rarely",
+        "Sometimes",
+        "Often",
+        "Almost always"
+      ],
+      "life_stages": ["all"],
+      "tags": ["guilt", "emotions", "regret"]
+    },
+    {
+      "id": "SH005",
+      "category": "spending_habits",
+      "question": "How aware are you of your daily spending?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "No idea where money goes",
+        "5": "Track some expenses",
+        "10": "Track every dollar"
+      },
+      "life_stages": ["all"],
+      "tags": ["awareness", "tracking", "mindfulness"]
+    },
+    {
+      "id": "SH006",
+      "category": "spending_habits",
+      "question": "What percentage of your income goes to 'fun money' each month?",
+      "type": "multiple_choice",
+      "options": [
+        "0-5%",
+        "5-10%",
+        "10-20%",
+        "20-30%",
+        "30%+",
+        "I'm not sure"
+      ],
+      "life_stages": ["all"],
+      "tags": ["discretionary", "budget", "awareness"]
+    },
+    {
+      "id": "SH007",
+      "category": "spending_habits",
+      "question": "Do you use shopping as a way to cope with emotions?",
+      "type": "yes_no",
+      "life_stages": ["all"],
+      "tags": ["emotional_spending", "coping", "awareness"]
+    },
+    {
+      "id": "SH008",
+      "category": "spending_habits",
+      "question": "How often do you look back at your spending and regret it?",
+      "type": "multiple_choice",
+      "options": [
+        "Never",
+        "Rarely",
+        "Sometimes",
+        "Often",
+        "Almost always"
+      ],
+      "life_stages": ["all"],
+      "tags": ["regret", "reflection", "patterns"]
+    },
+    {
+      "id": "SH009",
+      "category": "spending_habits",
+      "question": "What's your biggest spending weakness?",
+      "type": "multiple_choice",
+      "options": [
+        "Food delivery",
+        "Coffee shops",
+        "Online shopping",
+        "Subscriptions",
+        "Going out with friends",
+        "Hobbies",
+        "I don't have one"
+      ],
+      "life_stages": ["all"],
+      "tags": ["weakness", "awareness", "categories"]
+    },
+    {
+      "id": "SH010",
+      "category": "spending_habits",
+      "question": "How do you feel right after making a big purchase?",
+      "type": "multiple_choice",
+      "options": [
+        "Excited and happy",
+        "Anxious and worried",
+        "Guilty",
+        "Neutral/Fine",
+        "Depends on what it is"
+      ],
+      "life_stages": ["all"],
+      "tags": ["emotions", "immediate_reaction", "patterns"]
+    },
+    {
+      "id": "FC001",
+      "category": "financial_confidence",
+      "question": "How confident do you feel making financial decisions?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Not confident at all",
+        "5": "Somewhat confident",
+        "10": "Very confident"
+      },
+      "life_stages": ["all"],
+      "tags": ["confidence", "self_efficacy", "decision_making"]
+    },
+    {
+      "id": "FC002",
+      "category": "financial_confidence",
+      "question": "Do you feel in control of your finances?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Not at all in control",
+        "5": "Somewhat in control",
+        "10": "Completely in control"
+      },
+      "life_stages": ["all"],
+      "tags": ["control", "empowerment", "agency"]
+    },
+    {
+      "id": "FC003",
+      "category": "financial_confidence",
+      "question": "How comfortable are you talking about money with others?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Very uncomfortable",
+        "5": "Neutral",
+        "10": "Very comfortable"
+      },
+      "life_stages": ["all"],
+      "tags": ["communication", "social", "openness"]
+    },
+    {
+      "id": "FC004",
+      "category": "financial_confidence",
+      "question": "Do you understand where your money goes each month?",
+      "type": "yes_no",
+      "life_stages": ["all"],
+      "tags": ["awareness", "understanding", "tracking"]
+    },
+    {
+      "id": "FC005",
+      "category": "financial_confidence",
+      "question": "How confident are you about investing?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "No idea where to start",
+        "5": "Learning but uncertain",
+        "10": "Very confident investor"
+      },
+      "life_stages": ["young_professional", "established_career", "pre_retirement"],
+      "tags": ["investing", "knowledge", "confidence"]
+    },
+    {
+      "id": "FC006",
+      "category": "financial_confidence",
+      "question": "Do you feel capable of improving your financial situation?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Feels hopeless",
+        "5": "Maybe with help",
+        "10": "Absolutely capable"
+      },
+      "life_stages": ["all"],
+      "tags": ["self_efficacy", "hope", "capability"]
+    },
+    {
+      "id": "FC007",
+      "category": "financial_confidence",
+      "question": "How prepared do you feel for unexpected expenses?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Not prepared at all",
+        "5": "Somewhat prepared",
+        "10": "Fully prepared"
+      },
+      "life_stages": ["all"],
+      "tags": ["preparedness", "emergency", "confidence"]
+    },
+    {
+      "id": "FC008",
+      "category": "financial_confidence",
+      "question": "Do you trust yourself to stick to a budget?",
+      "type": "yes_no",
+      "life_stages": ["all"],
+      "tags": ["trust", "discipline", "budgeting"]
+    },
+    {
+      "id": "FC009",
+      "category": "financial_confidence",
+      "question": "How often do you feel proud of your financial decisions?",
+      "type": "multiple_choice",
+      "options": [
+        "Never",
+        "Rarely",
+        "Sometimes",
+        "Often",
+        "Very often"
+      ],
+      "life_stages": ["all"],
+      "tags": ["pride", "positive_emotions", "self_assessment"]
+    },
+    {
+      "id": "FC010",
+      "category": "financial_confidence",
+      "question": "Do you feel financially literate?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Not at all",
+        "5": "Somewhat",
+        "10": "Very literate"
+      },
+      "life_stages": ["all"],
+      "tags": ["literacy", "knowledge", "education"]
+    },
+    {
+      "id": "MM001",
+      "category": "money_mindset",
+      "question": "What does money mean to you?",
+      "type": "multiple_choice",
+      "options": [
+        "Freedom",
+        "Security",
+        "Stress",
+        "Power",
+        "Opportunity",
+        "A necessary evil",
+        "Just a tool"
+      ],
+      "life_stages": ["all"],
+      "tags": ["beliefs", "meaning", "values"]
+    },
+    {
+      "id": "MM002",
+      "category": "money_mindset",
+      "question": "Do you believe you deserve financial success?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Not at all",
+        "5": "Sometimes",
+        "10": "Absolutely"
+      },
+      "life_stages": ["all"],
+      "tags": ["self_worth", "deservingness", "beliefs"]
+    },
+    {
+      "id": "MM003",
+      "category": "money_mindset",
+      "question": "How did your family handle money when you were growing up?",
+      "type": "multiple_choice",
+      "options": [
+        "Openly and positively",
+        "With stress and arguments",
+        "Never talked about it",
+        "Taught good habits",
+        "Money was always tight",
+        "Money was never an issue",
+        "I don't remember"
+      ],
+      "life_stages": ["all"],
+      "tags": ["childhood", "patterns", "family"]
+    },
+    {
+      "id": "MM004",
+      "category": "money_mindset",
+      "question": "Do you think having more money would solve most of your problems?",
+      "type": "yes_no",
+      "life_stages": ["all"],
+      "tags": ["beliefs", "money_meaning", "expectations"]
+    },
+    {
+      "id": "MM005",
+      "category": "money_mindset",
+      "question": "How do you feel about people who are wealthy?",
+      "type": "multiple_choice",
+      "options": [
+        "Admiration",
+        "Envy",
+        "Resentment",
+        "Neutral",
+        "Depends on how they got it",
+        "Don't think about it"
+      ],
+      "life_stages": ["all"],
+      "tags": ["beliefs", "social", "attitudes"]
+    },
+    {
+      "id": "MM006",
+      "category": "money_mindset",
+      "question": "Do you believe you can change your financial situation?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "It's hopeless",
+        "5": "Maybe with effort",
+        "10": "Definitely can change it"
+      },
+      "life_stages": ["all"],
+      "tags": ["growth_mindset", "hope", "agency"]
+    },
+    {
+      "id": "MM007",
+      "category": "money_mindset",
+      "question": "What's your earliest money memory?",
+      "type": "open_text",
+      "max_characters": 150,
+      "life_stages": ["all"],
+      "tags": ["childhood", "memory", "formative"]
+    },
+    {
+      "id": "MM008",
+      "category": "money_mindset",
+      "question": "Do you feel ashamed about your financial situation?",
+      "type": "yes_no",
+      "life_stages": ["all"],
+      "tags": ["shame", "emotions", "self_perception"]
+    },
+    {
+      "id": "MM009",
+      "category": "money_mindset",
+      "question": "How much does money define your self-worth?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Not at all",
+        "5": "Somewhat",
+        "10": "Completely"
+      },
+      "life_stages": ["all"],
+      "tags": ["self_worth", "identity", "values"]
+    },
+    {
+      "id": "MM010",
+      "category": "money_mindset",
+      "question": "What money lesson do you wish you learned earlier?",
+      "type": "open_text",
+      "max_characters": 200,
+      "life_stages": ["all"],
+      "tags": ["lessons", "reflection", "education"]
+    },
+    {
+      "id": "LC001",
+      "category": "life_context",
+      "question": "What's the biggest life change you're facing right now?",
+      "type": "multiple_choice",
+      "options": [
+        "New job/career change",
+        "Moving/relocating",
+        "Getting married/partnered",
+        "Having a baby",
+        "Buying a home",
+        "Going back to school",
+        "Health issues",
+        "No major changes"
+      ],
+      "life_stages": ["all"],
+      "tags": ["transitions", "context", "current_life"]
+    },
+    {
+      "id": "LC002",
+      "category": "life_context",
+      "question": "How stable does your income feel right now?",
+      "type": "scale",
+      "scale_labels": {
+        "1": "Very unstable",
+        "5": "Moderately stable",
+        "10": "Very stable"
+      },
+      "life_stages": ["all"],
+      "tags": ["income", "stability", "security"]
+    },
+    {
+      "id": "LC003",
+      "category": "life_context",
+      "question": "Are you currently supporting anyone financially besides yourself?",
+      "type": "multiple_choice",
+      "options": [
+        "No one",
+        "Children",
+        "Aging parents",
+        "Partner/spouse",
+        "Siblings",
+        "Other family",
+        "Multiple people"
+      ],
+      "life_stages": ["all"],
+      "tags": ["dependents", "obligations", "family"]
+    },
+    {
+      "id": "LC004",
+      "category": "life_context",
+      "question": "How has your financial situation changed in the past year?",
+      "type": "multiple_choice",
+      "options": [
+        "Significantly improved",
+        "Somewhat improved",
+        "Stayed the same",
+        "Somewhat worse",
+        "Significantly worse"
+      ],
+      "life_stages": ["all"],
+      "tags": ["trajectory", "change", "comparison"]
+    },
+    {
+      "id": "LC005",
+      "category": "life_context",
+      "question": "What's your living situation?",
+      "type": "multiple_choice",
+      "options": [
+        "Own my home",
+        "Renting alone",
+        "Renting with roommates",
+        "Living with family",
+        "Living with partner",
+        "Other"
+      ],
+      "life_stages": ["all"],
+      "tags": ["housing", "context", "expenses"]
+    },
+    {
+      "id": "LC006",
+      "category": "life_context",
+      "question": "Are you dealing with any major health or medical expenses?",
+      "type": "yes_no",
+      "life_stages": ["all"],
+      "tags": ["health", "expenses", "stress"]
+    },
+    {
+      "id": "LC007",
+      "category": "life_context",
+      "question": "How many jobs/income sources do you have?",
+      "type": "multiple_choice",
+      "options": [
+        "None currently",
+        "One full-time job",
+        "One part-time job",
+        "Multiple jobs",
+        "Self-employed",
+        "Mix of employment + side hustles"
+      ],
+      "life_stages": ["all"],
+      "tags": ["income", "work", "hustle"]
+    },
+    {
+      "id": "LC008",
+      "category": "life_context",
+      "question": "What season of life are you in financially?",
+      "type": "multiple_choice",
+      "options": [
+        "Just starting out",
+        "Building foundation",
+        "Climbing upward",
+        "Maintaining stability",
+        "Preparing for next phase",
+        "In transition",
+        "Recovering/rebuilding"
+      ],
+      "life_stages": ["all"],
+      "tags": ["life_stage", "self_perception", "phase"]
+    },
+    {
+      "id": "LC009",
+      "category": "life_context",
+      "question": "Are you currently in school or planning to go back?",
+      "type": "yes_no",
+      "life_stages": ["student", "young_professional", "established_career"],
+      "tags": ["education", "investment", "goals"]
+    },
+    {
+      "id": "LC010",
+      "category": "life_context",
+      "question": "How far away is retirement for you?",
+      "type": "multiple_choice",
+      "options": [
+        "10+ years away",
+        "5-10 years",
+        "1-5 years",
+        "Already retired",
+        "Don't plan to retire",
+        "Can't even think about it yet"
+      ],
+      "life_stages": ["established_career", "pre_retirement", "retired"],
+      "tags": ["retirement", "planning", "timeline"]
+    }
+  ]
+}

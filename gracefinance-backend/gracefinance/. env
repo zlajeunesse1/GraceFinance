@@ -1,0 +1,6 @@
+DATABASE_URL=postgresql://postgres:Ireland1019!@localhost:5432/gracefinance
+SECRET_KEY=your-secret-key-change-this-to-something-random
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+APP_ENV=development
+FRONTEND_URL=http://localhost:3000
