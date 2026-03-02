@@ -31,11 +31,10 @@ class Settings(BaseSettings):
     # Claude AI
     anthropic_api_key: str = "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"
 
-    # App
+# App
     app_env: str = "development"
     frontend_url: str = "http://localhost:3000"
-    app_domain: str = ""  # e.g. "gracefinance.com" — set in production
-
+    app_domain: str = ""
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
