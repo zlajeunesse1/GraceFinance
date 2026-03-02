@@ -1,0 +1,237 @@
+"""
+Check-In Router — Frontend endpoints for the daily check-in flow.
+
+Endpoints:
+  GET  /checkin/questions       → Get today's questions (empty if already checked in today)
+  POST /checkin/submit          → Submit answers — enforces ONE check-in per user per day
+  GET  /checkin/metrics         → User's FCS metric snapshots over time
+
+Data quality rule:
+  One check-in per user per calendar day (UTC). Enforced at the server level on
+  both endpoints.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from sqlalchemy import desc, func, and_
+from datetime import datetime, timezone, timedelta, date
+
+from app.database import get_db
+from app.models import User
+from app.models.checkin import CheckInResponse, UserMetricSnapshot
+from app.services.auth import get_current_user
+from app.services.question_bank import get_todays_questions
+from app.services.checkin_service import (
+    save_responses,
+    compute_user_snapshot,
+    get_user_metric_history,
+)
+from app.services.reward_engine import compute_reward
+from app.schemas.checkin_schemas import (
+    TodaysQuestionsOut,
+    QuestionOut,
+    CheckInSubmit,
+    UserMetricOut,
+    UserMetricHistory,
+)
+from app.routers.me import _build_snapshot
+
+
+router = APIRouter(prefix="/checkin", tags=["Check-In"])
+
+
+# ── Internal helper ────────────────────────────────────────────────────────────
+
+def _has_checked_in_today(db: Session, user_id) -> bool:
+    """
+    Returns True if the user has ANY check-in response recorded today (UTC).
+    Single source of truth for the one-per-day rule.
+    """
+    today_utc = date.today()
+    count = (
+        db.query(func.count(CheckInResponse.id))
+        .filter(
+            and_(
+                CheckInResponse.user_id == user_id,
+                func.date(CheckInResponse.checkin_date) == today_utc,
+            )
+        )
+        .scalar() or 0
+    )
+    return count > 0
+
+
+# ──────────────────────────────────────────
+#  GET TODAY'S QUESTIONS
+# ──────────────────────────────────────────
+
+@router.get("/questions", response_model=TodaysQuestionsOut)
+def get_questions(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Serve today's check-in questions.
+    Daily: 4 rotating FCS questions.
+    Sundays: also includes 5 weekly BSI questions.
+    Returns empty lists + already_completed=True if user already checked in today.
+    """
+    if _has_checked_in_today(db, user.id):
+        return TodaysQuestionsOut(
+            date=str(date.today()),
+            daily_questions=[],
+            weekly_questions=[],
+            is_weekly_day=False,
+            already_completed=True,
+        )
+
+    result = get_todays_questions(user.id)
+
+    return TodaysQuestionsOut(
+        date=result["date"],
+        daily_questions=[
+            QuestionOut(
+                question_id=q.question_id,
+                question_text=q.question_text,
+                dimension=q.dimension,
+                scale_type=q.scale_type,
+                scale_max=q.scale_max,
+                is_weekly=q.is_weekly,
+                low_label=q.low_label,
+                high_label=q.high_label,
+            )
+            for q in result["daily_questions"]
+        ],
+        weekly_questions=[
+            QuestionOut(
+                question_id=q.question_id,
+                question_text=q.question_text,
+                dimension=q.dimension,
+                scale_type=q.scale_type,
+                scale_max=q.scale_max,
+                is_weekly=q.is_weekly,
+                low_label=q.low_label,
+                high_label=q.high_label,
+            )
+            for q in result["weekly_questions"]
+        ],
+        is_weekly_day=result["is_weekly_day"],
+        already_completed=False,
+    )
+
+
+# ──────────────────────────────────────────
+#  SUBMIT CHECK-IN ANSWERS (with Reward Loop)
+# ──────────────────────────────────────────
+
+@router.post("/submit")
+def submit_checkin(
+    payload: CheckInSubmit,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Accept user's check-in answers, save them, compute updated metrics,
+    and return the reward payload + canonical UserMetricsSnapshot.
+
+    DATA QUALITY: Returns HTTP 409 if user already submitted today.
+    """
+    if not payload.answers:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No answers provided.",
+        )
+
+    # ── One check-in per day — hard server-side enforcement ──
+    if _has_checked_in_today(db, user.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You've already completed today's check-in. Come back tomorrow.",
+        )
+
+    # 1. Capture previous snapshot BEFORE recomputing (needed for accurate delta)
+    previous_snapshot = (
+        db.query(UserMetricSnapshot)
+        .filter(UserMetricSnapshot.user_id == user.id)
+        .order_by(desc(UserMetricSnapshot.computed_at))
+        .first()
+    )
+
+    # 2. Save all responses (commits internally)
+    saved = save_responses(db, user.id, payload.answers)
+
+    # 3. Recompute user's metric snapshot + update streak (commits internally)
+    snapshot = compute_user_snapshot(db, user.id)
+
+    # 4. Compute reward payload
+    reward = compute_reward(
+        db=db,
+        user_id=user.id,
+        new_snapshot=snapshot,
+        previous_snapshot=previous_snapshot,
+    )
+
+    # 5. Final commit
+    db.commit()
+
+    # 6. Count check-ins this week for the canonical snapshot
+    week_start = datetime.now(timezone.utc) - timedelta(days=7)
+    checkins_this_week = (
+        db.query(func.count(CheckInResponse.id))
+        .filter(
+            and_(
+                CheckInResponse.user_id == user.id,
+                CheckInResponse.checkin_date >= week_start,
+            )
+        )
+        .scalar() or 0
+    )
+
+    # 7. Build canonical snapshot — powers all dashboard tiles
+    # getattr guards against current_streak not yet existing on older User rows
+    metrics_snapshot = _build_snapshot(
+        latest=snapshot,
+        previous=previous_snapshot,
+        streak=getattr(user, 'current_streak', 0) or 0,
+        checkins_this_week=checkins_this_week,
+    )
+
+    return {
+        "message": "Check-in saved successfully",
+        "responses_saved": len(saved),
+        "fcs_snapshot": float(snapshot.fcs_composite or 0),  # backward compat
+        "metrics": metrics_snapshot,                          # canonical snapshot
+        "reward": reward,
+    }
+
+
+# ──────────────────────────────────────────
+#  USER METRIC HISTORY
+# ──────────────────────────────────────────
+
+@router.get("/metrics", response_model=UserMetricHistory)
+def get_metrics(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Get the user's FCS metric snapshots over time for charting."""
+    snapshots = get_user_metric_history(db, user.id, days)
+
+    return UserMetricHistory(
+        user_id=user.id,
+        snapshots=[
+            UserMetricOut(
+                computed_at=s.computed_at,
+                current_stability=s.current_stability,
+                future_outlook=s.future_outlook,
+                purchasing_power=s.purchasing_power,
+                debt_pressure=s.debt_pressure,
+                financial_agency=s.financial_agency,
+                fcs_composite=s.fcs_composite,
+                bsi_score=s.bsi_score,
+                checkin_count=s.checkin_count,
+            )
+            for s in snapshots
+        ],
+    )
