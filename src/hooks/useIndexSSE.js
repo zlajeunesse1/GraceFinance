@@ -14,7 +14,9 @@
 
 import { useState, useEffect, useRef } from "react"
 
-var API_BASE = "http://localhost:8000"
+var API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : 'https://gracefinance-production.up.railway.app'
 
 export default function useIndexSSE() {
   var indexState = useState(null)

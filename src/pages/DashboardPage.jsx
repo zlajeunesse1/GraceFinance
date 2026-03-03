@@ -17,7 +17,9 @@ import StreakEngine from "../components/StreakEngine"
 
 /* AUTHENTICATED FETCH */
 
-var API_BASE = "http://localhost:8000"
+var API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : 'https://gracefinance-production.up.railway.app'
 
 function apiFetch(endpoint, options) {
   var token = localStorage.getItem("grace_token")
@@ -148,11 +150,6 @@ function Badge(props) {
     </span>
   )
 }
-
-/* ═══════════════════════════════════════════════════
-   ECOSYSTEM LAYER LABEL — subtle section marker
-   Creates the "connected system" feel
-   ═══════════════════════════════════════════════════ */
 
 function EcosystemLabel(props) {
   var ctx = useTheme()
@@ -309,7 +306,6 @@ function DimensionBreakdown(props) {
     }
   })
 
-  // Progressive: only show breakdown if stability_breakdown is unlocked
   var hasBreakdown = unlockedFeatures.indexOf("stability_breakdown") >= 0 || unlockedFeatures.indexOf("fcs_score") >= 0
 
   if (!hasBreakdown) {
@@ -400,7 +396,6 @@ function FCSTrendChart(props) {
   var snapshots = props.snapshots || []
   var unlockedFeatures = props.unlockedFeatures || []
 
-  // Progressive: trend chart locked until behavioral_trends tier
   var hasTrends = unlockedFeatures.indexOf("trend_analysis") >= 0
 
   if (snapshots.length < 2 && !hasTrends) {
@@ -938,7 +933,7 @@ function MomentumMeter(props) {
   )
 }
 
-/* RADAR CHART — progressive disclosure */
+/* RADAR CHART */
 
 function DimensionRadar(props) {
   var ctx = useTheme()
@@ -1025,7 +1020,7 @@ function DimensionRadar(props) {
 
 
 /* ═══════════════════════════════════════════════════════════════
-   MAIN DASHBOARD — The Behavioral Ecosystem
+   MAIN DASHBOARD
    ═══════════════════════════════════════════════════════════════ */
 
 export default function DashboardPage() {
@@ -1058,7 +1053,6 @@ export default function DashboardPage() {
   var indexData = indexState[0]
   var setIndexData = indexState[1]
 
-  /* ── NEW: Progression state ── */
   var progressionState = useState(null)
   var progressionData = progressionState[0]
   var setProgressionData = progressionState[1]
@@ -1096,7 +1090,6 @@ export default function DashboardPage() {
     if (freshMetrics) {
       setSnapshotData(freshMetrics)
     }
-    // Always reload progression after check-in (unlock status may have changed)
     apiFetch("/progression/status")
       .then(function (data) { setProgressionData(data) })
       .catch(function () {})
@@ -1139,7 +1132,6 @@ export default function DashboardPage() {
     if (v != null && v < weakestVal) { weakestVal = v; weakestDim = d }
   })
 
-  /* ── Progression-derived values ── */
   var unlockedFeatures = progressionData ? progressionData.unlocked_features || [] : []
   var nextUnlock = progressionData ? progressionData.next_unlock : null
   var dataPoints = progressionData ? progressionData.data_points || 0 : 0
@@ -1157,7 +1149,6 @@ export default function DashboardPage() {
 
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 20px 60px" }}>
 
-        {/* ═══ HEADER ═══ */}
         <div style={{
           display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20,
           opacity: mounted ? 1 : 0, transform: mounted ? "translateY(0)" : "translateY(-10px)", transition: "all 0.5s ease",
@@ -1181,7 +1172,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ═══ NAVIGATION ═══ */}
         <div style={{
           marginBottom: 16, opacity: mounted ? 1 : 0,
           transform: mounted ? "translateY(0)" : "translateY(-5px)", transition: "all 0.5s ease 0.05s",
@@ -1189,7 +1179,6 @@ export default function DashboardPage() {
           <NavBar navigate={navigate} activePage="dashboard" />
         </div>
 
-        {/* ═══ STREAK ENGINE — The Dopamine Bar ═══ */}
         <div style={{
           marginBottom: 20, opacity: mounted ? 1 : 0,
           transform: mounted ? "translateY(0)" : "translateY(10px)", transition: "all 0.5s ease 0.08s",
@@ -1202,7 +1191,6 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* ═══ INPUT LAYER: Daily Check-In ═══ */}
         <EcosystemLabel label="Input Layer" color="#3FB950" />
         <div style={{
           marginBottom: 24, opacity: mounted ? 1 : 0,
@@ -1211,7 +1199,6 @@ export default function DashboardPage() {
           <DailyCheckin onCheckinComplete={handleCheckinComplete} />
         </div>
 
-        {/* ═══ SNAPSHOT: Quick Stats ═══ */}
         <EcosystemLabel label="Snapshot" color="#58A6FF" />
         <div style={{
           marginBottom: 24, opacity: mounted ? 1 : 0,
@@ -1229,7 +1216,6 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* ═══ SCORE LAYER: FCS + Radar ═══ */}
         <EcosystemLabel label="Score Layer" color={t.accent} />
         <div style={{
           display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24,
@@ -1243,7 +1229,6 @@ export default function DashboardPage() {
           <DimensionRadar metrics={currentMetrics} checkinCount={checkinCount} />
         </div>
 
-        {/* ═══ TREND LAYER: FCS Over Time ═══ */}
         <EcosystemLabel label="Trend Layer" color="#D29922" />
         <div style={{
           marginBottom: 24, opacity: mounted ? 1 : 0,
@@ -1252,7 +1237,6 @@ export default function DashboardPage() {
           <FCSTrendChart snapshots={snapshots} unlockedFeatures={unlockedFeatures} />
         </div>
 
-        {/* ═══ INSIGHT LAYER: Breakdown + Grace AI ═══ */}
         <EcosystemLabel label="Insight Layer" color="#BC8CFF" />
         <div style={{
           display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24,
@@ -1267,7 +1251,6 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* ═══ PROGRESSION LAYER: Unlocks + Index ═══ */}
         <EcosystemLabel label="Progression Layer" color="#3FB950" />
         <div style={{
           display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24,
@@ -1280,7 +1263,6 @@ export default function DashboardPage() {
           <GraceIndexPreview navigate={navigate} indexData={indexData} />
         </div>
 
-        {/* ═══ MOMENTUM ═══ */}
         <div style={{
           marginBottom: 24, opacity: mounted ? 1 : 0,
           transform: mounted ? "translateY(0)" : "translateY(20px)", transition: "all 0.6s ease 0.4s",
@@ -1293,7 +1275,6 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* ═══ FOOTER ═══ */}
         <div style={{ textAlign: "center", paddingTop: 16 }}>
           <p style={{ color: t.border, fontSize: 12, margin: 0 }}>
             {"GraceFinance \u00B7 Built with purpose \u00B7 In memory of Grace \uD83D\uDC3E"}

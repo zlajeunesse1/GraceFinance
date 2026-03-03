@@ -21,7 +21,9 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts"
 
-var API_BASE = "http://localhost:8000"
+var API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : 'https://gracefinance-production.up.railway.app'
 
 function apiFetch(endpoint) {
   var token = localStorage.getItem("grace_token")
@@ -139,7 +141,7 @@ export default function IndexPage() {
           </div>
         </div>
 
-        {/* Nav — FIXED: was raw text, now uses NavBar component */}
+        {/* Nav */}
         <div style={{ marginBottom: 24 }}>
           <NavBar navigate={navigate} activePage="index" />
         </div>

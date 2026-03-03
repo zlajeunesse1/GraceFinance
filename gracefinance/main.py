@@ -59,6 +59,18 @@ if settings.app_domain:
     allowed_origins.append(f"https://{settings.app_domain}")
     allowed_origins.append(f"https://www.{settings.app_domain}")
 
+# Support additional origins from env (comma-separated)
+extra_origins = getattr(settings, "extra_cors_origins", None)
+if extra_origins:
+    allowed_origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
+
+# Always include known deployment domains
+allowed_origins.extend([
+    "https://gracefinance.co",
+    "https://www.gracefinance.co",
+    "https://gracefinance-frontend.pages.dev",
+])
+
 allowed_origins = list(set(allowed_origins))
 
 app.add_middleware(

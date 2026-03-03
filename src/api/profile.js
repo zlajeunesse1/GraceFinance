@@ -2,11 +2,13 @@
  * GraceFinance - Profile API
  * Matches your existing auth pattern:
  * - Token key: 'grace_token' (matches AuthContext)
- * - Base URL: VITE_API_URL env var
+ * - Base URL: auto-detects localhost vs production
  * - No user_id ever sent to backend
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : 'https://gracefinance-production.up.railway.app';
 
 function getAuthHeaders() {
   const token = localStorage.getItem('grace_token') // matches your AuthContext
