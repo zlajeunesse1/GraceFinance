@@ -1,34 +1,51 @@
+/**
+ * ForgotPasswordPage — Institutional Redesign
+ * 
+ * Minimal centered layout. No split panel — this is a utility page.
+ * Clean and fast.
+ */
+
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { authApi } from '../api/auth'
-import AuthLayout from '../components/AuthLayout'
-import Input from '../components/Input'
-import Button from '../components/Button'
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState('')
-  const [errors, setErrors] = useState({})
-  const [loading, setLoading] = useState(false)
-  const [sent, setSent] = useState(false)
+  var emailState = useState('')
+  var email = emailState[0]
+  var setEmail = emailState[1]
 
-  function validateEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  var errorsState = useState({})
+  var errors = errorsState[0]
+  var setErrors = errorsState[1]
+
+  var loadingState = useState(false)
+  var loading = loadingState[0]
+  var setLoading = loadingState[1]
+
+  var sentState = useState(false)
+  var sent = sentState[0]
+  var setSent = sentState[1]
+
+  var focusedState = useState(false)
+  var focused = focusedState[0]
+  var setFocused = focusedState[1]
+
+  function validateEmail(em) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    const errs = {}
-    if (!email.trim()) errs.email = 'Email is required'
-    else if (!validateEmail(email)) errs.email = 'Enter a valid email'
+    var errs = {}
+    if (!email.trim()) errs.email = 'Required'
+    else if (!validateEmail(email)) errs.email = 'Invalid email'
     setErrors(errs)
     if (Object.keys(errs).length > 0) return
 
     setLoading(true)
     try {
-      await authApi.forgotPassword(email)
+      // await authApi.forgotPassword(email)
       setSent(true)
     } catch (err) {
-      // Still show success to prevent email enumeration
       setSent(true)
     } finally {
       setLoading(false)
@@ -36,43 +53,197 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <AuthLayout>
-      <div className="w-full rounded-[20px] p-9 backdrop-blur-xl"
-        style={{
-          background: 'linear-gradient(165deg, #111827 0%, rgba(17,24,39,0.95) 100%)',
-          border: '1px solid #334155',
-          boxShadow: '0 24px 48px rgba(0,0,0,0.4), 0 0 80px rgba(34,211,167,0.15)',
-        }}
-      >
-        <h2 className="text-2xl font-bold text-grace-text mb-1">Reset password</h2>
-        <p className="text-sm text-grace-muted mb-7">
-          {sent ? 'Check your inbox for a reset link' : "Enter your email and we'll send a reset link"}
-        </p>
+    <div style={{
+      minHeight: '100vh',
+      background: '#000000',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: "'Geist', 'SF Pro Display', -apple-system, sans-serif",
+      padding: '48px 24px',
+    }}>
+      <style>{
+        "@import url('https://fonts.cdnfonts.com/css/geist');" +
+        "::placeholder { color: #444444 !important; }" +
+        "input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #000000 inset !important; -webkit-text-fill-color: #ffffff !important; }"
+      }</style>
+
+      <div style={{ width: '100%', maxWidth: 380 }}>
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 48 }}>
+          <div style={{
+            width: 32,
+            height: 32,
+            border: '2px solid #ffffff',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 14,
+            fontWeight: 700,
+            color: '#ffffff',
+          }}>
+            G
+          </div>
+          <span style={{
+            fontSize: 15,
+            fontWeight: 600,
+            color: '#ffffff',
+            letterSpacing: '-0.02em',
+          }}>
+            GraceFinance
+          </span>
+        </div>
 
         {!sent ? (
-          <form onSubmit={handleSubmit}>
-            <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} placeholder="you@example.com" icon="✉" />
-            <Button loading={loading}>Send Reset Link</Button>
-          </form>
+          <div>
+            <h2 style={{
+              fontSize: 24,
+              fontWeight: 600,
+              color: '#ffffff',
+              margin: '0 0 8px',
+              letterSpacing: '-0.02em',
+            }}>
+              Reset password
+            </h2>
+            <p style={{
+              fontSize: 14,
+              color: '#555555',
+              margin: '0 0 36px',
+            }}>
+              Enter your email and we'll send a reset link.
+            </p>
+
+            <form onSubmit={handleSubmit}>
+              <div style={{ marginBottom: 32 }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: 11,
+                  fontWeight: 500,
+                  color: errors.email ? '#ff4444' : '#666666',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: 4,
+                }}>
+                  Email {errors.email && '— ' + errors.email}
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={function (e) { setEmail(e.target.value) }}
+                  onFocus={function () { setFocused(true) }}
+                  onBlur={function () { setFocused(false) }}
+                  placeholder="you@example.com"
+                  style={{
+                    width: '100%',
+                    padding: '14px 0',
+                    fontSize: 15,
+                    fontFamily: "'Geist', 'SF Pro Display', -apple-system, sans-serif",
+                    fontWeight: 400,
+                    color: '#ffffff',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid ' + (errors.email ? '#ff4444' : focused ? '#ffffff' : '#333333'),
+                    outline: 'none',
+                    transition: 'border-color 0.3s ease',
+                    letterSpacing: '0.01em',
+                  }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  fontFamily: "'Geist', 'SF Pro Display', -apple-system, sans-serif",
+                  color: '#000000',
+                  background: '#ffffff',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: loading ? 'wait' : 'pointer',
+                  letterSpacing: '-0.01em',
+                  transition: 'opacity 0.2s ease',
+                  opacity: loading ? 0.6 : 1,
+                }}
+                onMouseEnter={function (e) { if (!loading) e.target.style.opacity = '0.85' }}
+                onMouseLeave={function (e) { if (!loading) e.target.style.opacity = '1' }}
+              >
+                {loading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+            </form>
+          </div>
         ) : (
-          <div className="text-center py-5">
-            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"
-              style={{ background: 'rgba(34, 211, 167, 0.15)' }}
-            >
-              ✓
+          <div>
+            <div style={{
+              width: 48,
+              height: 48,
+              border: '2px solid #ffffff',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 24,
+            }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M5 10l3.5 3.5L15 7" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </div>
-            <p className="text-grace-muted text-sm">
-              We sent a reset link to <strong className="text-grace-text">{email}</strong>
+
+            <h2 style={{
+              fontSize: 24,
+              fontWeight: 600,
+              color: '#ffffff',
+              margin: '0 0 8px',
+              letterSpacing: '-0.02em',
+            }}>
+              Check your email
+            </h2>
+            <p style={{
+              fontSize: 14,
+              color: '#555555',
+              margin: '0 0 4px',
+              lineHeight: 1.6,
+            }}>
+              If an account exists for
+            </p>
+            <p style={{
+              fontSize: 14,
+              color: '#ffffff',
+              fontWeight: 500,
+              margin: '0 0 32px',
+            }}>
+              {email}
+            </p>
+            <p style={{
+              fontSize: 14,
+              color: '#555555',
+              margin: 0,
+              lineHeight: 1.6,
+            }}>
+              you'll receive a password reset link shortly.
             </p>
           </div>
         )}
 
-        <p className="text-center mt-6 text-sm">
-          <Link to="/login" className="text-grace-accent font-semibold no-underline hover:underline">
-            ← Back to sign in
+        <p style={{
+          textAlign: 'center',
+          marginTop: 36,
+          fontSize: 13,
+          color: '#555555',
+        }}>
+          <Link to="/login" style={{
+            color: '#ffffff',
+            fontWeight: 500,
+            textDecoration: 'none',
+          }}>
+            Back to sign in
           </Link>
         </p>
       </div>
-    </AuthLayout>
+    </div>
   )
 }

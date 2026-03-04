@@ -1,7 +1,36 @@
-import { useState, useEffect, useRef } from 'react'
-import { useTheme } from '../context/ThemeContext'
+/**
+ * GraceChat — Institutional Redesign
+ *
+ * Stripped: useTheme, GraceAvatar paw, purple bubble colors,
+ *           gradient backgrounds, colored badges, BC8CFF accents.
+ *
+ * Kept: All API logic (intro, chat), suggestions, message flow,
+ *       typing indicator, error handling, scroll-to-bottom.
+ *
+ * Design: Terminal-clean. White-on-black. Grace speaks in gray,
+ *         you speak in white. No decoration.
+ */
 
-var API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
+import { useState, useEffect, useRef } from 'react'
+
+var API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : 'https://gracefinance-production.up.railway.app'
+```
+var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
+
+var C = {
+  bg:     "#000000",
+  card:   "#0a0a0a",
+  border: "#1a1a1a",
+  text:   "#ffffff",
+  muted:  "#666666",
+  dim:    "#444444",
+  faint:  "#333333",
+  error:  "#ff4444",
+}
+
+/* ── Authenticated fetch ── */
 
 function apiFetch(endpoint, options) {
   var token = localStorage.getItem('grace_token')
@@ -30,69 +59,55 @@ function apiFetch(endpoint, options) {
   })
 }
 
-/* GRACE PAW AVATAR */
+/* ── Grace avatar (minimal "G" mark, no paw) ── */
 
 function GraceAvatar(props) {
-  var size = props.size || 36
-  var ctx = useTheme()
-  var t = ctx.theme
-
+  var size = props.size || 28
   return (
     <div style={{
-      width: size, height: size, borderRadius: '50%',
-      background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
-      border: '2px solid ' + t.accent + '40',
+      width: size, height: size, borderRadius: 6,
+      border: '1.5px solid ' + C.faint,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      flexShrink: 0,
-      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+      flexShrink: 0, fontSize: size * 0.4, fontWeight: 700,
+      color: C.text, fontFamily: FONT,
     }}>
-      <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 64 64" fill="none">
-        <ellipse cx="32" cy="40" rx="13" ry="11" fill={t.accent} opacity="0.9" />
-        <ellipse cx="19" cy="23" rx="6.5" ry="7.5" fill={t.accent} opacity="0.8" transform="rotate(-15 19 23)" />
-        <ellipse cx="45" cy="23" rx="6.5" ry="7.5" fill={t.accent} opacity="0.8" transform="rotate(15 45 23)" />
-        <ellipse cx="13" cy="34" rx="5.5" ry="6.5" fill={t.accent} opacity="0.7" transform="rotate(-30 13 34)" />
-        <ellipse cx="51" cy="34" rx="5.5" ry="6.5" fill={t.accent} opacity="0.7" transform="rotate(30 51 34)" />
-      </svg>
+      G
     </div>
   )
 }
 
-/* TYPING INDICATOR */
+/* ── Typing indicator ── */
 
 function TypingIndicator() {
-  var ctx = useTheme()
-  var t = ctx.theme
-
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16 }}>
-      <GraceAvatar size={32} />
+      <GraceAvatar size={28} />
       <div style={{
-        background: 'rgba(188,140,255,0.08)', border: '1px solid rgba(188,140,255,0.15)',
-        borderRadius: '16px 16px 16px 4px', padding: '12px 18px',
+        background: C.card, border: '1px solid ' + C.border,
+        borderRadius: '12px 12px 12px 4px', padding: '12px 16px',
       }}>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
           {[0, 1, 2].map(function (i) {
             return (
               <div key={i} style={{
-                width: 7, height: 7, borderRadius: '50%', background: '#BC8CFF',
-                animation: 'gracePulse 1.4s infinite',
-                animationDelay: i * 0.2 + 's',
-                opacity: 0.4,
+                width: 5, height: 5, borderRadius: '50%', background: C.muted,
+                animation: 'graceTyping 1.4s infinite',
+                animationDelay: i * 0.2 + 's', opacity: 0.3,
               }} />
             )
           })}
         </div>
       </div>
-      <style>{"@keyframes gracePulse { 0%, 60%, 100% { opacity: 0.4; transform: scale(1); } 30% { opacity: 1; transform: scale(1.2); } }"}</style>
+      <style>{"@keyframes graceTyping { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 0.8; } }"}</style>
     </div>
   )
 }
 
-/* MAIN GRACE CHAT COMPONENT */
+/* ══════════════════════════════════════════
+   MAIN COMPONENT
+   ══════════════════════════════════════════ */
 
 export default function GraceChat() {
-  var ctx = useTheme()
-  var theme = ctx.theme
 
   var chatState = useState([])
   var messages = chatState[0]
@@ -114,6 +129,10 @@ export default function GraceChat() {
   var error = errorState[0]
   var setError = errorState[1]
 
+  var focusedState = useState(false)
+  var focused = focusedState[0]
+  var setFocused = focusedState[1]
+
   var chatEndRef = useRef(null)
 
   useEffect(function () {
@@ -121,11 +140,11 @@ export default function GraceChat() {
       .then(function (data) { setIntro(data) })
       .catch(function () {
         setIntro({
-          greeting: "Hey there, I'm Grace. I'm your financial coach. What's on your mind?",
+          greeting: "I'm Grace, your financial coach. What's on your mind?",
           suggestions: [
             "Why do I stress about money even when I'm okay?",
             "How do I start building an emergency fund?",
-            "I just overspent - help me not feel terrible",
+            "I just overspent — help me think through it",
             "What does my FCS score actually mean?",
             "Help me set a realistic money goal",
           ],
@@ -170,76 +189,70 @@ export default function GraceChat() {
 
   return (
     <div style={{
-      background: theme.card, border: '1px solid ' + theme.border,
-      borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+      background: C.card, border: '1px solid ' + C.border,
+      borderRadius: 10, overflow: 'hidden', display: 'flex',
+      flexDirection: 'column', fontFamily: FONT,
     }}>
+      <style>{"@import url('https://fonts.cdnfonts.com/css/geist'); ::placeholder { color: #444444 !important; }"}</style>
 
-      {/* HEADER */}
+      {/* Header */}
       <div style={{
-        padding: '16px 20px', borderBottom: '1px solid ' + theme.border,
-        display: 'flex', alignItems: 'center', gap: 12,
-        background: 'linear-gradient(135deg, rgba(188,140,255,0.05), transparent)',
+        padding: '14px 20px', borderBottom: '1px solid ' + C.border,
+        display: 'flex', alignItems: 'center', gap: 10,
       }}>
-        <GraceAvatar size={40} />
+        <GraceAvatar size={32} />
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: theme.text }}>Grace</span>
-            <span style={{
-              fontSize: 9, fontWeight: 700, color: '#BC8CFF', background: 'rgba(188,140,255,0.12)',
-              padding: '2px 8px', borderRadius: 10, textTransform: 'uppercase', letterSpacing: '0.08em',
-            }}>
-              AI Coach
-            </span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: C.text, letterSpacing: '-0.02em' }}>Grace</span>
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: C.text }} />
           </div>
-          <p style={{ fontSize: 11, color: theme.muted, margin: '2px 0 0' }}>
-            Your financial coach - powered by your real FCS data
+          <p style={{ fontSize: 11, color: C.dim, margin: '2px 0 0', letterSpacing: '0.02em' }}>
+            AI Financial Coach
           </p>
         </div>
       </div>
 
-      {/* MESSAGES */}
+      {/* Messages */}
       <div style={{
         flex: 1, overflowY: 'auto', padding: '16px 20px',
         maxHeight: 420, minHeight: 200,
       }}>
 
+        {/* Intro state */}
         {intro && messages.length === 0 && (
           <div>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16 }}>
-              <GraceAvatar size={32} />
+              <GraceAvatar size={28} />
               <div style={{
-                background: 'rgba(188,140,255,0.08)', border: '1px solid rgba(188,140,255,0.15)',
-                borderRadius: '16px 16px 16px 4px', padding: '12px 16px', maxWidth: '85%',
+                background: C.card, border: '1px solid ' + C.border,
+                borderRadius: '12px 12px 12px 4px', padding: '12px 16px', maxWidth: '85%',
               }}>
-                <p style={{ color: theme.text, fontSize: 13, lineHeight: 1.7, margin: 0 }}>
+                <p style={{ color: C.text, fontSize: 13, lineHeight: 1.7, margin: 0 }}>
                   {intro.greeting}
                 </p>
               </div>
             </div>
 
-            <div style={{
-              display: 'flex', flexWrap: 'wrap', gap: 8, marginLeft: 42, marginBottom: 8,
-            }}>
+            {/* Suggestions */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginLeft: 38, marginBottom: 8 }}>
               {intro.suggestions.map(function (s, i) {
                 return (
-                  <button
-                    key={i}
+                  <button key={i}
                     onClick={function () { sendMessage(s) }}
                     style={{
-                      background: theme.border + '15', border: '1px solid ' + theme.border + '40',
-                      borderRadius: 20, padding: '7px 14px', color: theme.muted,
-                      fontSize: 12, cursor: 'pointer', transition: 'all 0.2s',
-                      whiteSpace: 'nowrap',
+                      background: 'transparent',
+                      border: '1px solid ' + C.faint,
+                      borderRadius: 6, padding: '7px 12px', color: C.muted,
+                      fontSize: 12, cursor: 'pointer', transition: 'all 0.15s ease',
+                      fontFamily: FONT, whiteSpace: 'nowrap',
                     }}
                     onMouseEnter={function (e) {
-                      e.target.style.background = theme.accent + '15'
-                      e.target.style.borderColor = theme.accent + '40'
-                      e.target.style.color = theme.accent
+                      e.target.style.borderColor = C.muted
+                      e.target.style.color = C.text
                     }}
                     onMouseLeave={function (e) {
-                      e.target.style.background = theme.border + '15'
-                      e.target.style.borderColor = theme.border + '40'
-                      e.target.style.color = theme.muted
+                      e.target.style.borderColor = C.faint
+                      e.target.style.color = C.muted
                     }}
                   >
                     {s}
@@ -250,6 +263,7 @@ export default function GraceChat() {
           </div>
         )}
 
+        {/* Message history */}
         {messages.map(function (msg, i) {
           var isUser = msg.role === 'user'
 
@@ -259,32 +273,27 @@ export default function GraceChat() {
               justifyContent: isUser ? 'flex-end' : 'flex-start',
               marginBottom: 16,
             }}>
-              {!isUser && <GraceAvatar size={32} />}
+              {!isUser && <GraceAvatar size={28} />}
 
               <div style={{
                 maxWidth: '80%',
-                background: isUser
-                  ? theme.accent + '15'
-                  : 'rgba(188,140,255,0.08)',
-                border: '1px solid ' + (isUser
-                  ? theme.accent + '30'
-                  : 'rgba(188,140,255,0.15)'),
-                borderRadius: isUser
-                  ? '16px 16px 4px 16px'
-                  : '16px 16px 16px 4px',
+                background: isUser ? '#111111' : C.card,
+                border: '1px solid ' + (isUser ? '#222222' : C.border),
+                borderRadius: isUser ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
                 padding: '12px 16px',
               }}>
                 {!isUser && (
                   <p style={{
-                    color: '#BC8CFF', fontSize: 10, fontWeight: 700,
-                    margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.06em',
+                    color: C.dim, fontSize: 10, fontWeight: 600,
+                    margin: '0 0 4px', textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
                   }}>
                     Grace
                   </p>
                 )}
                 <p style={{
-                  color: theme.text, fontSize: 13, margin: 0, lineHeight: 1.7,
-                  whiteSpace: 'pre-wrap',
+                  color: C.text, fontSize: 13, margin: 0,
+                  lineHeight: 1.7, whiteSpace: 'pre-wrap',
                 }}>
                   {msg.content}
                 </p>
@@ -297,10 +306,10 @@ export default function GraceChat() {
 
         {error && (
           <div style={{
-            background: '#F8514910', border: '1px solid #F8514925',
-            borderRadius: 12, padding: '10px 14px', marginBottom: 12,
+            background: C.error + '08', border: '1px solid ' + C.error + '20',
+            borderRadius: 8, padding: '10px 14px', marginBottom: 12,
           }}>
-            <p style={{ color: '#F85149', fontSize: 12, margin: 0 }}>
+            <p style={{ color: C.error, fontSize: 12, margin: 0 }}>
               Grace is having trouble connecting. Try again in a moment.
             </p>
           </div>
@@ -309,36 +318,41 @@ export default function GraceChat() {
         <div ref={chatEndRef} />
       </div>
 
-      {/* INPUT */}
+      {/* Input */}
       <div style={{
-        padding: '12px 20px', borderTop: '1px solid ' + theme.border,
+        padding: '12px 20px', borderTop: '1px solid ' + C.border,
         display: 'flex', gap: 10, alignItems: 'center',
       }}>
         <input
           value={input}
           onChange={function (e) { setInput(e.target.value) }}
           onKeyDown={function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-          placeholder="Talk to Grace about anything money-related..."
+          onFocus={function () { setFocused(true) }}
+          onBlur={function () { setFocused(false) }}
+          placeholder="Ask Grace anything about your finances..."
           disabled={isTyping}
           style={{
-            flex: 1, padding: '12px 16px', borderRadius: 12,
-            border: '1px solid ' + theme.border, background: theme.dark,
-            color: theme.text, fontSize: 13, outline: 'none',
-            opacity: isTyping ? 0.6 : 1,
+            flex: 1, padding: '12px 0', borderRadius: 0,
+            border: 'none', borderBottom: '1px solid ' + (focused ? C.text : C.faint),
+            background: 'transparent', color: C.text, fontSize: 13,
+            outline: 'none', fontFamily: FONT,
+            opacity: isTyping ? 0.5 : 1,
+            transition: 'border-color 0.2s ease, opacity 0.2s ease',
           }}
         />
         <button
           onClick={function () { sendMessage() }}
           disabled={isTyping || !input.trim()}
           style={{
-            padding: '12px 20px', borderRadius: 12, border: 'none',
-            background: input.trim() && !isTyping
-              ? 'linear-gradient(135deg, #BC8CFF, ' + theme.accent + ')'
-              : theme.border + '40',
-            color: input.trim() && !isTyping ? '#fff' : theme.muted,
-            fontSize: 13, fontWeight: 600, cursor: input.trim() && !isTyping ? 'pointer' : 'default',
-            transition: 'all 0.2s',
+            padding: '10px 20px', borderRadius: 6, border: 'none',
+            background: input.trim() && !isTyping ? C.text : C.border,
+            color: input.trim() && !isTyping ? C.bg : C.dim,
+            fontSize: 13, fontWeight: 600, fontFamily: FONT,
+            cursor: input.trim() && !isTyping ? 'pointer' : 'default',
+            transition: 'all 0.15s ease',
           }}
+          onMouseEnter={function (e) { if (input.trim() && !isTyping) e.target.style.opacity = '0.85' }}
+          onMouseLeave={function (e) { e.target.style.opacity = '1' }}
         >
           Send
         </button>

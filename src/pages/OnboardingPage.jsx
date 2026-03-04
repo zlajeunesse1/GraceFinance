@@ -1,64 +1,48 @@
-import { useState, useEffect, useRef } from "react"
-import { useTheme } from "../context/ThemeContext"
+/**
+ * OnboardingPage — Institutional Redesign
+ *
+ * 5 steps: Welcome → Goals → Financials → Mission → Snapshot
+ * 
+ * Cut: "About" step (age/experience/heard-from), encouragement overlays,
+ *       FadeIn wrappers, gradient backgrounds, emoji paw prints,
+ *       separate income/expenses/debt steps (merged into one).
+ * 
+ * Tone: You're building a financial confidence score.
+ *        This data has institutional value. Respect the user's intelligence.
+ */
 
-var STEPS = ["welcome", "goals", "income", "expenses", "debt", "mission", "about", "snapshot"]
+import { useState, useEffect, useRef } from "react"
+
+/* ── DESIGN TOKENS ── */
+
+var C = {
+  bg:     "#000000",
+  card:   "#0a0a0a",
+  border: "#1a1a1a",
+  text:   "#ffffff",
+  muted:  "#666666",
+  dim:    "#444444",
+  faint:  "#333333",
+}
+
+var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
+
+/* ── STEPS ── */
+
+var STEPS = ["welcome", "goals", "financials", "mission", "snapshot"]
+
+/* ── GOAL OPTIONS ── */
 
 var goalOptions = [
-  { id: "save", label: "Save More Money", desc: "Build an emergency fund or save for something big" },
-  { id: "debt", label: "Pay Off Debt", desc: "Tackle credit cards, loans, or other debts" },
-  { id: "track", label: "Track My Spending", desc: "See where my money actually goes" },
-  { id: "budget", label: "Build a Budget", desc: "Create a plan and stick to it" },
-  { id: "wealth", label: "Build Wealth", desc: "Invest, grow assets, and plan long-term" },
-  { id: "habits", label: "Understand My Money Habits", desc: "Break bad patterns, build healthy ones" },
+  { id: "save",   label: "Save More",           desc: "Build reserves and emergency funds" },
+  { id: "debt",   label: "Eliminate Debt",       desc: "Systematically pay down what you owe" },
+  { id: "track",  label: "Track Spending",       desc: "See where your money actually goes" },
+  { id: "budget", label: "Build a Budget",       desc: "Create a system and follow it" },
+  { id: "wealth", label: "Build Wealth",         desc: "Invest, grow assets, plan long-term" },
+  { id: "habits", label: "Fix Money Habits",     desc: "Break patterns, build better ones" },
 ]
 
-var ageOptions = ["18-24", "25-34", "35-44", "45-54", "55+"]
-
-var experienceOptions = [
-  { id: "beginner", label: "Beginner", desc: "Just starting my financial journey" },
-  { id: "intermediate", label: "Intermediate", desc: "I know the basics but want to improve" },
-  { id: "advanced", label: "Advanced", desc: "I actively manage my finances and investments" },
-]
-
-var hearOptions = ["Social Media", "Friend / Family", "Google Search", "Reddit", "TikTok", "Other"]
-
-var encouragements = {
-  income: [
-    "That's real money working for you every month.",
-    "Solid foundation. Let's make every dollar count.",
-    "Now let's see where it's going.",
-  ],
-  expenses: [
-    "Good \u2014 knowing this is half the battle.",
-    "Awareness is the first step to control.",
-    "Now let's look at the full picture.",
-  ],
-  debt: [
-    "We've helped people tackle way more. You've got this.",
-    "That number has an expiration date. Let's find it.",
-    "Every dollar you throw at this is a win.",
-  ],
-  debtZero: [
-    "Debt-free? That's a powerful position to be in.",
-    "You're already ahead of most people. Let's build on that.",
-  ],
-}
-
-function getEncouragement(step, value) {
-  if (step === "debt" && value === 0) {
-    var arr = encouragements.debtZero
-    return arr[Math.floor(Math.random() * arr.length)]
-  }
-  var arr2 = encouragements[step]
-  if (!arr2) return ""
-  return arr2[Math.floor(Math.random() * arr2.length)]
-}
-
-function formatCurrency(num) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0,
-  }).format(num)
-}
+/* ── CURRENCY INPUT ── */
 
 function CurrencyInput(props) {
   var inputRef = useRef(null)
@@ -72,15 +56,12 @@ function CurrencyInput(props) {
     props.onChange(raw === "" ? "" : parseInt(raw, 10))
   }
 
-  var ctx = useTheme()
-  var t = ctx.theme
-
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: 360 }}>
+    <div style={{ position: "relative", width: "100%" }}>
       <span style={{
-        position: "absolute", left: 20, top: "50%", transform: "translateY(-50%)",
-        fontSize: 28, fontFamily: "'DM Sans', sans-serif",
-        color: props.value ? t.text : t.muted, fontWeight: 600, pointerEvents: "none",
+        position: "absolute", left: 0, top: "50%", transform: "translateY(-50%)",
+        fontSize: 24, fontFamily: FONT, color: props.value ? C.text : C.dim,
+        fontWeight: 400, pointerEvents: "none",
       }}>$</span>
       <input
         ref={inputRef}
@@ -90,51 +71,35 @@ function CurrencyInput(props) {
         onChange={handleChange}
         placeholder={props.placeholder || "0"}
         style={{
-          width: "100%", padding: "18px 20px 18px 44px", fontSize: 28,
-          fontFamily: "'DM Sans', sans-serif", fontWeight: 600, color: t.text,
-          background: t.dark, border: "2px solid " + t.border, borderRadius: 14,
-          outline: "none", transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-          boxSizing: "border-box",
+          width: "100%", padding: "12px 0 12px 20px", fontSize: 24,
+          fontFamily: FONT, fontWeight: 400, color: C.text,
+          background: "transparent", border: "none",
+          borderBottom: "1px solid " + C.faint,
+          outline: "none", transition: "border-color 0.2s ease",
+          boxSizing: "border-box", letterSpacing: "-0.02em",
+          fontVariantNumeric: "tabular-nums",
         }}
-        onFocus={function (e) {
-          e.target.style.borderColor = t.accent
-          e.target.style.boxShadow = "0 0 0 4px " + t.accent + "20"
-        }}
-        onBlur={function (e) {
-          e.target.style.borderColor = t.border
-          e.target.style.boxShadow = "none"
-        }}
+        onFocus={function (e) { e.target.style.borderColor = C.text }}
+        onBlur={function (e) { e.target.style.borderColor = C.faint }}
       />
     </div>
   )
 }
 
-function FadeIn(props) {
-  var delay = props.delay || 0
-  var visState = useState(false)
-  var visible = visState[0]
-  var setVisible = visState[1]
+/* ── FORMAT ── */
 
-  useEffect(function () {
-    var timer = setTimeout(function () { setVisible(true) }, delay)
-    return function () { clearTimeout(timer) }
-  }, [delay])
-
-  return (
-    <div style={{
-      opacity: visible ? 1 : 0,
-      transform: visible ? "translateY(0)" : "translateY(18px)",
-      transition: "opacity 0.6s ease, transform 0.6s ease",
-      ...(props.style || {}),
-    }}>
-      {props.children}
-    </div>
-  )
+function formatCurrency(num) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency", currency: "USD",
+    minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(num)
 }
 
+/* ══════════════════════════════════════════
+   MAIN ONBOARDING
+   ══════════════════════════════════════════ */
+
 export default function OnboardingPage(props) {
-  var ctx = useTheme()
-  var t = ctx.theme
 
   var stepState = useState("welcome")
   var step = stepState[0]
@@ -160,64 +125,30 @@ export default function OnboardingPage(props) {
   var mission = missionState[0]
   var setMission = missionState[1]
 
-  var ageState = useState("")
-  var age = ageState[0]
-  var setAge = ageState[1]
-
-  var expState = useState("")
-  var experience = expState[0]
-  var setExperience = expState[1]
-
-  var hearState = useState("")
-  var heardFrom = hearState[0]
-  var setHeardFrom = hearState[1]
-
-  var encourageState = useState("")
-  var encouragement = encourageState[0]
-  var setEncouragement = encourageState[1]
-
-  var showEncState = useState(false)
-  var showEncouragement = showEncState[0]
-  var setShowEncouragement = showEncState[1]
-
   var transState = useState(false)
   var transitioning = transState[0]
   var setTransitioning = transState[1]
 
-  var snapState = useState(false)
-  var snapshotReady = snapState[0]
-  var setSnapshotReady = snapState[1]
+  var mountedState = useState(false)
+  var mounted = mountedState[0]
+  var setMounted = mountedState[1]
 
+  useEffect(function () {
+    setTimeout(function () { setMounted(true) }, 100)
+  }, [])
+
+  /* Step index for progress */
   var stepIndex = STEPS.indexOf(step)
   var progress = step === "welcome" ? 0 : step === "snapshot" ? 100 : (stepIndex / (STEPS.length - 1)) * 100
 
-  function goNext(nextStep, encourageKey, encourageValue) {
-    if (encourageKey) {
-      var msg = getEncouragement(encourageKey, encourageValue)
-      setEncouragement(msg)
-      setShowEncouragement(true)
-      setTimeout(function () {
-        setShowEncouragement(false)
-        setTimeout(function () {
-          setTransitioning(true)
-          setTimeout(function () {
-            setStep(nextStep)
-            setTransitioning(false)
-          }, 300)
-        }, 200)
-      }, 1800)
-    } else {
-      setTransitioning(true)
-      setTimeout(function () {
-        setStep(nextStep)
-        setTransitioning(false)
-      }, 300)
-    }
+  /* Navigation */
+  function goNext(nextStep) {
+    setTransitioning(true)
+    setTimeout(function () {
+      setStep(nextStep)
+      setTransitioning(false)
+    }, 250)
   }
-
-  useEffect(function () {
-    if (step === "snapshot") setTimeout(function () { setSnapshotReady(true) }, 400)
-  }, [step])
 
   function toggleGoal(id) {
     if (selectedGoals.indexOf(id) >= 0) {
@@ -229,8 +160,11 @@ export default function OnboardingPage(props) {
 
   function handleComplete() {
     var data = {
-      goals: selectedGoals, income: income, expenses: expenses, debt: debt,
-      mission: mission, age: age, experience: experience, heardFrom: heardFrom,
+      goals: selectedGoals,
+      income: income,
+      expenses: expenses,
+      debt: debt,
+      mission: mission,
     }
     localStorage.setItem("grace-onboarding-complete", "true")
     localStorage.setItem("grace-onboarding-data", JSON.stringify(data))
@@ -242,420 +176,489 @@ export default function OnboardingPage(props) {
     if (props.onComplete) props.onComplete(null)
   }
 
+  /* Computed */
   var incomeVal = income === "" ? 0 : income
   var expensesVal = expenses === "" ? 0 : expenses
   var debtVal = debt === "" ? 0 : debt
   var available = incomeVal - expensesVal
-  var debtFreeMonths = debtVal > 0 && available > 0 ? Math.ceil(debtVal / available) : null
-  var acceleratedMonths = debtFreeMonths ? Math.ceil(debtFreeMonths * 0.7) : null
   var savingsRate = incomeVal > 0 ? ((available / incomeVal) * 100).toFixed(0) : 0
 
-  var isWelcome = step === "welcome"
-  var labelStyle = { fontSize: 13, color: t.muted, marginBottom: 8, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }
-  var questionStyle = { fontSize: 26, fontWeight: 700, color: t.text, marginBottom: 8, lineHeight: 1.3 }
-  var subTextStyle = { fontSize: 14, color: t.muted, marginBottom: 32, lineHeight: 1.5 }
+  /* ── Shared styles ── */
 
-  var btnStyle = {
-    padding: "16px 48px", fontSize: 17, fontWeight: 700, fontFamily: "'DM Sans', sans-serif",
-    color: t.isDark ? "#0a0f1a" : "#fff", background: t.accent, border: "none",
-    borderRadius: 12, cursor: "pointer", transition: "all 0.25s ease",
-    boxShadow: "0 4px 20px " + t.accent + "40",
+  var headingStyle = {
+    fontSize: 28, fontWeight: 300, color: C.text,
+    letterSpacing: "-0.03em", lineHeight: 1.25,
+    margin: "0 0 12px", fontFamily: FONT,
   }
 
-  var btnDisabled = { opacity: 0.4, pointerEvents: "none" }
-  var stepNum = STEPS.indexOf(step)
-  var totalInputSteps = 6
+  var subStyle = {
+    fontSize: 14, color: C.dim, lineHeight: 1.7,
+    margin: "0 0 36px", fontFamily: FONT,
+  }
+
+  var labelStyle = {
+    fontSize: 11, fontWeight: 500, color: C.muted,
+    textTransform: "uppercase", letterSpacing: "0.08em",
+    marginBottom: 8, display: "block", fontFamily: FONT,
+  }
+
+  var btnStyle = {
+    padding: "14px 48px", fontSize: 14, fontWeight: 600,
+    fontFamily: FONT, color: "#000000", background: "#ffffff",
+    border: "none", borderRadius: 8, cursor: "pointer",
+    transition: "opacity 0.2s ease", letterSpacing: "-0.01em",
+  }
+
+  var btnDisabled = {
+    opacity: 0.25, pointerEvents: "none",
+  }
 
   return (
     <div style={{
-      minHeight: "100vh", width: "100%", display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif",
-      position: "relative", overflow: "hidden", padding: "40px 20px", boxSizing: "border-box",
-      background: isWelcome
-        ? "radial-gradient(ellipse at 30% 20%, " + t.accentGlow + " 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, " + t.accentGlow + " 0%, transparent 50%), " + t.dark
-        : t.dark,
+      minHeight: "100vh", width: "100%",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      fontFamily: FONT, position: "relative",
+      padding: "60px 24px", boxSizing: "border-box",
+      background: C.bg, color: C.text,
     }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+      <style>{
+        "@import url('https://fonts.cdnfonts.com/css/geist');" +
+        "::placeholder { color: #444444 !important; }"
+      }</style>
 
-      {/* Skip button */}
+      {/* Skip */}
       {step !== "snapshot" && step !== "welcome" && (
-        <div style={{ position: "fixed", top: 20, right: 24, zIndex: 50 }}>
+        <div style={{ position: "fixed", top: 24, right: 28, zIndex: 50 }}>
           <button onClick={handleSkip} style={{
-            background: "none", border: "none", color: t.muted, fontSize: 13, cursor: "pointer",
-          }}>
-            Skip for now →
+            background: "transparent", border: "none",
+            color: C.dim, fontSize: 12, fontFamily: FONT,
+            cursor: "pointer", transition: "color 0.2s",
+          }}
+            onMouseEnter={function (e) { e.target.style.color = C.text }}
+            onMouseLeave={function (e) { e.target.style.color = C.dim }}
+          >
+            Skip setup
           </button>
         </div>
       )}
 
       {/* Progress bar */}
       {step !== "welcome" && (
-        <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: 4, background: t.border, zIndex: 100 }}>
-          <div style={{
-            height: "100%", width: progress + "%", background: t.accent,
-            transition: "width 0.6s ease", borderRadius: "0 2px 2px 0",
-          }} />
-        </div>
-      )}
-
-      {/* Encouragement overlay */}
-      {showEncouragement && (
         <div style={{
-          position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-          background: t.dark + "F8", zIndex: 200, padding: 40,
+          position: "fixed", top: 0, left: 0,
+          width: "100%", height: 2, background: C.border, zIndex: 100,
         }}>
-          <FadeIn>
-            <p style={{
-              fontSize: 24, fontWeight: 600, color: t.accent, textAlign: "center",
-              lineHeight: 1.5, maxWidth: 460,
-            }}>
-              {encouragement}
-            </p>
-          </FadeIn>
+          <div style={{
+            height: "100%", width: progress + "%",
+            background: C.text, transition: "width 0.4s ease",
+          }} />
         </div>
       )}
 
       {/* Content */}
       <div style={{
-        opacity: transitioning ? 0 : 1, transform: transitioning ? "translateY(12px)" : "translateY(0)",
-        transition: "opacity 0.3s ease, transform 0.3s ease",
-        display: "flex", flexDirection: "column", alignItems: "center", width: "100%", maxWidth: 520,
+        opacity: transitioning ? 0 : (mounted ? 1 : 0),
+        transform: transitioning ? "translateY(8px)" : "translateY(0)",
+        transition: "opacity 0.25s ease, transform 0.25s ease",
+        display: "flex", flexDirection: "column",
+        alignItems: "center", width: "100%", maxWidth: 520,
       }}>
 
-        {/* WELCOME */}
+
+        {/* ═══ WELCOME ═══ */}
         {step === "welcome" && (
-          <div style={{ textAlign: "center" }}>
-            <FadeIn delay={200}>
-              <img src="/grace-logo.webp" alt="Grace" style={{
-                width: 100, height: 100, borderRadius: "50%", margin: "0 auto 24px", display: "block",
-              }} />
-            </FadeIn>
-            <FadeIn delay={400}>
-              <h1 style={{ fontSize: 42, fontWeight: 700, color: t.text, letterSpacing: -0.5, marginBottom: 4 }}>
-                GraceFinance
-              </h1>
-            </FadeIn>
-            <FadeIn delay={600}>
-              <p style={{ fontSize: 13, letterSpacing: "0.15em", textTransform: "uppercase", color: t.muted, marginBottom: 40, fontWeight: 500 }}>
-                Smarter Finance is Right Around the Corner™
-              </p>
-            </FadeIn>
-            <FadeIn delay={800}>
-              <p style={{ fontSize: 18, color: t.muted, textAlign: "center", lineHeight: 1.7, maxWidth: 380, margin: "0 auto 40px" }}>
-                Tired of wondering where your money went?
-                <br /><br />
-                <span style={{ fontSize: 15, opacity: 0.7 }}>In 60 seconds, you'll see your money differently.</span>
-              </p>
-            </FadeIn>
-            <FadeIn delay={1100}>
-              <button onClick={function () { goNext("goals") }} style={btnStyle}>
-                Take Control Now
-              </button>
-            </FadeIn>
-            <FadeIn delay={1400}>
-              <p style={{ fontSize: 12, color: t.muted, marginTop: 24, opacity: 0.5 }}>
-                No card required · Free to start · Your data stays yours
-              </p>
-            </FadeIn>
+          <div style={{ textAlign: "center", maxWidth: 440 }}>
+
+            {/* Logo */}
+            <div style={{
+              width: 40, height: 40, border: "1.5px solid " + C.text,
+              borderRadius: 10, display: "flex", alignItems: "center",
+              justifyContent: "center", fontSize: 16, fontWeight: 700,
+              margin: "0 auto 40px",
+            }}>
+              G
+            </div>
+
+            <h1 style={{
+              fontSize: 36, fontWeight: 300, color: C.text,
+              letterSpacing: "-0.03em", lineHeight: 1.2,
+              margin: "0 0 16px",
+            }}>
+              Start tracking your
+              <br />
+              <span style={{ fontWeight: 600 }}>financial confidence.</span>
+            </h1>
+
+            <p style={{
+              fontSize: 15, color: C.dim, lineHeight: 1.7,
+              margin: "0 0 12px", maxWidth: 380, marginLeft: "auto", marginRight: "auto",
+            }}>
+              GraceFinance measures how you feel about your money — daily.
+              Track your confidence score and watch it compound over time.
+            </p>
+
+            <p style={{
+              fontSize: 13, color: C.faint, lineHeight: 1.6,
+              margin: "0 0 44px", maxWidth: 380, marginLeft: "auto", marginRight: "auto",
+            }}>
+              Your anonymized data contributes to the Grace Composite Index — 
+              real behavioral finance data built for institutional-grade insight.
+            </p>
+
+            <button
+              onClick={function () { goNext("goals") }}
+              style={btnStyle}
+              onMouseEnter={function (e) { e.target.style.opacity = "0.85" }}
+              onMouseLeave={function (e) { e.target.style.opacity = "1" }}
+            >
+              Get Started
+            </button>
+
+            <p style={{
+              fontSize: 11, color: C.faint, marginTop: 20,
+              letterSpacing: "0.02em",
+            }}>
+              Free to use · Your data stays yours · 60 seconds to set up
+            </p>
+
+            <p style={{
+              fontSize: 11, color: C.faint, marginTop: 32,
+              letterSpacing: "0.04em", textTransform: "uppercase",
+            }}>
+              GraceFinance™
+            </p>
           </div>
         )}
 
-        {/* GOALS */}
+
+        {/* ═══ GOALS ═══ */}
         {step === "goals" && (
-          <div>
-            <FadeIn delay={100}><p style={labelStyle}>Step 1 of {totalInputSteps}</p></FadeIn>
-            <FadeIn delay={200}><h2 style={questionStyle}>What brings you to GraceFinance?</h2></FadeIn>
-            <FadeIn delay={300}><p style={subTextStyle}>Select all that apply.</p></FadeIn>
-            <FadeIn delay={400}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                {goalOptions.map(function (goal) {
-                  var isSelected = selectedGoals.indexOf(goal.id) >= 0
-                  return (
-                    <button key={goal.id} onClick={function () { toggleGoal(goal.id) }} style={{
-                      display: "flex", flexDirection: "column", padding: 16, borderRadius: 14, textAlign: "left",
-                      border: "1.5px solid " + (isSelected ? t.accent : t.border),
-                      background: isSelected ? t.accent + "12" : "transparent", cursor: "pointer", transition: "all 0.2s",
+          <div style={{ width: "100%" }}>
+            <div style={labelStyle}>Step 1 of 4</div>
+            <h2 style={headingStyle}>
+              What do you want to <span style={{ fontWeight: 600 }}>track?</span>
+            </h2>
+            <p style={subStyle}>Select all that apply. This shapes your daily check-in.</p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 36 }}>
+              {goalOptions.map(function (goal) {
+                var isSelected = selectedGoals.indexOf(goal.id) >= 0
+                return (
+                  <button
+                    key={goal.id}
+                    onClick={function () { toggleGoal(goal.id) }}
+                    style={{
+                      display: "flex", flexDirection: "column",
+                      padding: "16px", borderRadius: 8, textAlign: "left",
+                      border: "1px solid " + (isSelected ? C.text : C.border),
+                      background: isSelected ? "#0d0d0d" : "transparent",
+                      cursor: "pointer", transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span style={{
+                      fontSize: 14, fontWeight: isSelected ? 600 : 400,
+                      color: isSelected ? C.text : C.muted,
+                      marginBottom: 4, fontFamily: FONT,
                     }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: isSelected ? t.accent : t.text, marginBottom: 4 }}>{goal.label}</span>
-                      <span style={{ fontSize: 12, color: t.muted, lineHeight: 1.4 }}>{goal.desc}</span>
-                    </button>
-                  )
-                })}
+                      {goal.label}
+                    </span>
+                    <span style={{
+                      fontSize: 12, color: C.dim, lineHeight: 1.4, fontFamily: FONT,
+                    }}>
+                      {goal.desc}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div style={{ textAlign: "center" }}>
+              <button
+                onClick={function () { goNext("financials") }}
+                style={selectedGoals.length > 0 ? btnStyle : Object.assign({}, btnStyle, btnDisabled)}
+                onMouseEnter={function (e) { if (selectedGoals.length > 0) e.target.style.opacity = "0.85" }}
+                onMouseLeave={function (e) { e.target.style.opacity = "1" }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+
+        {/* ═══ FINANCIALS (merged income + expenses + debt) ═══ */}
+        {step === "financials" && (
+          <div style={{ width: "100%" }}>
+            <div style={labelStyle}>Step 2 of 4</div>
+            <h2 style={headingStyle}>
+              Your <span style={{ fontWeight: 600 }}>monthly numbers.</span>
+            </h2>
+            <p style={subStyle}>
+              This calibrates your Financial Confidence Score.
+              Estimates are fine — precision comes with time.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 32, marginBottom: 40 }}>
+              <div>
+                <label style={labelStyle}>Monthly income (after tax)</label>
+                <CurrencyInput value={income} onChange={setIncome} placeholder="4,500" autoFocus />
               </div>
-            </FadeIn>
-            <FadeIn delay={500} style={{ marginTop: 32, textAlign: "center" }}>
-              <button onClick={function () { goNext("income") }}
-                style={selectedGoals.length > 0 ? btnStyle : Object.assign({}, btnStyle, btnDisabled)}>
+              <div>
+                <label style={labelStyle}>Monthly expenses</label>
+                <CurrencyInput value={expenses} onChange={setExpenses} placeholder="3,200" />
+              </div>
+              <div>
+                <label style={labelStyle}>Total debt (enter 0 if none)</label>
+                <CurrencyInput value={debt} onChange={setDebt} placeholder="0" />
+              </div>
+            </div>
+
+            <div style={{ textAlign: "center" }}>
+              <button
+                onClick={function () { goNext("mission") }}
+                style={income !== "" && expenses !== "" && debt !== "" ? btnStyle : Object.assign({}, btnStyle, btnDisabled)}
+                onMouseEnter={function (e) { if (income !== "" && expenses !== "" && debt !== "") e.target.style.opacity = "0.85" }}
+                onMouseLeave={function (e) { e.target.style.opacity = "1" }}
+              >
                 Continue
               </button>
-            </FadeIn>
+            </div>
           </div>
         )}
 
-        {/* INCOME */}
-        {step === "income" && (
-          <div style={{ textAlign: "center" }}>
-            <FadeIn delay={100}><p style={labelStyle}>Step 2 of {totalInputSteps}</p></FadeIn>
-            <FadeIn delay={200}><h2 style={questionStyle}>What do you bring home each month?</h2></FadeIn>
-            <FadeIn delay={300}><p style={subTextStyle}>Your total monthly income after taxes.</p></FadeIn>
-            <FadeIn delay={400}><CurrencyInput value={income} onChange={setIncome} placeholder="4,500" autoFocus /></FadeIn>
-            <FadeIn delay={500} style={{ marginTop: 32 }}>
-              <button onClick={function () { goNext("expenses", "income", incomeVal) }}
-                style={income !== "" && income > 0 ? btnStyle : Object.assign({}, btnStyle, btnDisabled)}>
-                Continue
-              </button>
-            </FadeIn>
-          </div>
-        )}
 
-        {/* EXPENSES */}
-        {step === "expenses" && (
-          <div style={{ textAlign: "center" }}>
-            <FadeIn delay={100}><p style={labelStyle}>Step 3 of {totalInputSteps}</p></FadeIn>
-            <FadeIn delay={200}><h2 style={questionStyle}>What goes out every month?</h2></FadeIn>
-            <FadeIn delay={300}><p style={subTextStyle}>Rent, bills, groceries, subscriptions — everything.</p></FadeIn>
-            <FadeIn delay={400}><CurrencyInput value={expenses} onChange={setExpenses} placeholder="3,200" autoFocus /></FadeIn>
-            <FadeIn delay={500} style={{ marginTop: 32 }}>
-              <button onClick={function () { goNext("debt", "expenses", expensesVal) }}
-                style={expenses !== "" && expenses > 0 ? btnStyle : Object.assign({}, btnStyle, btnDisabled)}>
-                Continue
-              </button>
-            </FadeIn>
-          </div>
-        )}
-
-        {/* DEBT */}
-        {step === "debt" && (
-          <div style={{ textAlign: "center" }}>
-            <FadeIn delay={100}><p style={labelStyle}>Step 4 of {totalInputSteps}</p></FadeIn>
-            <FadeIn delay={200}><h2 style={questionStyle}>How much debt are you carrying?</h2></FadeIn>
-            <FadeIn delay={300}><p style={subTextStyle}>Credit cards, loans, car payments. Enter $0 if debt-free.</p></FadeIn>
-            <FadeIn delay={400}><CurrencyInput value={debt} onChange={setDebt} placeholder="0" autoFocus /></FadeIn>
-            <FadeIn delay={500} style={{ marginTop: 32 }}>
-              <button onClick={function () { goNext("mission", "debt", debtVal) }}
-                style={debt !== "" ? btnStyle : Object.assign({}, btnStyle, btnDisabled)}>
-                Continue
-              </button>
-            </FadeIn>
-          </div>
-        )}
-
-        {/* MISSION */}
+        {/* ═══ MISSION ═══ */}
         {step === "mission" && (
-          <div style={{ textAlign: "center" }}>
-            <FadeIn delay={100}><p style={labelStyle}>Step 5 of {totalInputSteps}</p></FadeIn>
-            <FadeIn delay={200}><h2 style={questionStyle}>What are you fighting for?</h2></FadeIn>
-            <FadeIn delay={300}>
-              <p style={subTextStyle}>
-                A house. An emergency fund. Freedom from debt. Your kids' future.
-                <br />Be ambitious — this is what GraceFinance is built for.
-              </p>
-            </FadeIn>
-            <FadeIn delay={400}>
-              <textarea
-                value={mission} onChange={function (e) { setMission(e.target.value) }}
-                placeholder="I want to save $15,000 for a down payment on my first home by next year..."
-                autoFocus
-                style={{
-                  width: "100%", maxWidth: 400, padding: "16px 20px", fontSize: 16,
-                  fontFamily: "'DM Sans', sans-serif", color: t.text, background: t.dark,
-                  border: "2px solid " + t.border, borderRadius: 14, outline: "none",
-                  minHeight: 120, resize: "vertical", lineHeight: 1.6, boxSizing: "border-box",
-                }}
-                onFocus={function (e) { e.target.style.borderColor = t.accent }}
-                onBlur={function (e) { e.target.style.borderColor = t.border }}
-              />
-            </FadeIn>
-            <FadeIn delay={500} style={{ marginTop: 32 }}>
-              <button onClick={function () { goNext("about") }}
-                style={mission.trim() ? btnStyle : Object.assign({}, btnStyle, btnDisabled)}>
-                Continue
+          <div style={{ width: "100%" }}>
+            <div style={labelStyle}>Step 3 of 4</div>
+            <h2 style={headingStyle}>
+              What are you <span style={{ fontWeight: 600 }}>building toward?</span>
+            </h2>
+            <p style={subStyle}>
+              A house. Freedom from debt. Your kids' future.
+              Grace uses this to personalize your coaching.
+            </p>
+
+            <textarea
+              value={mission}
+              onChange={function (e) { setMission(e.target.value) }}
+              placeholder="I want to save $15,000 for a down payment on my first home..."
+              autoFocus
+              style={{
+                width: "100%", padding: "16px 0", fontSize: 15,
+                fontFamily: FONT, color: C.text, background: "transparent",
+                border: "none", borderBottom: "1px solid " + C.faint,
+                outline: "none", minHeight: 100, resize: "vertical",
+                lineHeight: 1.7, boxSizing: "border-box",
+                transition: "border-color 0.2s ease",
+              }}
+              onFocus={function (e) { e.target.style.borderColor = C.text }}
+              onBlur={function (e) { e.target.style.borderColor = C.faint }}
+            />
+
+            <div style={{ textAlign: "center", marginTop: 36 }}>
+              <button
+                onClick={function () { goNext("snapshot") }}
+                style={btnStyle}
+                onMouseEnter={function (e) { e.target.style.opacity = "0.85" }}
+                onMouseLeave={function (e) { e.target.style.opacity = "1" }}
+              >
+                {mission.trim() ? "Continue" : "Skip for now"}
               </button>
-            </FadeIn>
+            </div>
           </div>
         )}
 
-        {/* ABOUT */}
-        {step === "about" && (
-          <div>
-            <FadeIn delay={100}><p style={labelStyle}>Step 6 of {totalInputSteps}</p></FadeIn>
-            <FadeIn delay={200}><h2 style={questionStyle}>Tell us a bit about yourself</h2></FadeIn>
-            <FadeIn delay={300}><p style={subTextStyle}>This helps us tailor your experience.</p></FadeIn>
 
-            <FadeIn delay={400}>
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ fontSize: 13, fontWeight: 600, color: t.text, display: "block", marginBottom: 10 }}>Age Range</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {ageOptions.map(function (opt) {
-                    var sel = age === opt
-                    return (
-                      <button key={opt} onClick={function () { setAge(opt) }} style={{
-                        flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 13, fontWeight: 500,
-                        border: "1.5px solid " + (sel ? t.accent : t.border),
-                        background: sel ? t.accent + "12" : "transparent",
-                        color: sel ? t.accent : t.muted, cursor: "pointer",
-                      }}>
-                        {opt}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </FadeIn>
-
-            <FadeIn delay={500}>
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ fontSize: 13, fontWeight: 600, color: t.text, display: "block", marginBottom: 10 }}>Finance Experience</label>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {experienceOptions.map(function (opt) {
-                    var sel = experience === opt.id
-                    return (
-                      <button key={opt.id} onClick={function () { setExperience(opt.id) }} style={{
-                        display: "flex", flexDirection: "column", padding: "14px 16px", borderRadius: 12, textAlign: "left",
-                        border: "1.5px solid " + (sel ? t.accent : t.border),
-                        background: sel ? t.accent + "12" : "transparent", cursor: "pointer",
-                      }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: sel ? t.accent : t.text }}>{opt.label}</span>
-                        <span style={{ fontSize: 12, color: t.muted, marginTop: 2 }}>{opt.desc}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </FadeIn>
-
-            <FadeIn delay={600}>
-              <div style={{ marginBottom: 32 }}>
-                <label style={{ fontSize: 13, fontWeight: 600, color: t.text, display: "block", marginBottom: 10 }}>How did you hear about GraceFinance?</label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {hearOptions.map(function (opt) {
-                    var sel = heardFrom === opt
-                    return (
-                      <button key={opt} onClick={function () { setHeardFrom(opt) }} style={{
-                        padding: "10px 16px", borderRadius: 10, fontSize: 13, fontWeight: 500,
-                        border: "1.5px solid " + (sel ? t.accent : t.border),
-                        background: sel ? t.accent + "12" : "transparent",
-                        color: sel ? t.accent : t.muted, cursor: "pointer",
-                      }}>
-                        {opt}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </FadeIn>
-
-            <FadeIn delay={700} style={{ textAlign: "center" }}>
-              <button onClick={function () { goNext("snapshot") }} style={btnStyle}>
-                Show Me My Path
-              </button>
-            </FadeIn>
-          </div>
-        )}
-
-        {/* SNAPSHOT */}
+        {/* ═══ SNAPSHOT ═══ */}
         {step === "snapshot" && (
-          <div style={{ width: "100%", maxWidth: 500 }}>
-            <FadeIn delay={200}>
-              <p style={{ fontSize: 13, letterSpacing: "0.1em", textTransform: "uppercase", color: t.muted, marginBottom: 8, textAlign: "center", fontWeight: 500 }}>
-                Your Financial Snapshot
-              </p>
-            </FadeIn>
-            <FadeIn delay={400}>
-              <h2 style={{ fontSize: 28, fontWeight: 700, color: t.text, textAlign: "center", marginBottom: 32, lineHeight: 1.3 }}>
-                {available > 0 ? "You have more power than you think." : "Let's find your breathing room."}
-              </h2>
-            </FadeIn>
+          <div style={{ width: "100%", maxWidth: 480 }}>
 
-            <FadeIn delay={600}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+            <div style={{ textAlign: "center", marginBottom: 36 }}>
+              <div style={labelStyle}>Your Financial Snapshot</div>
+              <h2 style={{
+                fontSize: 28, fontWeight: 300, color: C.text,
+                letterSpacing: "-0.03em", lineHeight: 1.3,
+                margin: "8px 0 0",
+              }}>
+                {available >= 0
+                  ? "Here's where you stand."
+                  : "Clarity is the first step."}
+              </h2>
+            </div>
+
+            {/* Data grid */}
+            <div style={{
+              display: "grid", gridTemplateColumns: "1fr 1fr",
+              gap: 12, marginBottom: 24,
+            }}>
+              {[
+                { label: "Monthly Income",    value: formatCurrency(incomeVal) },
+                { label: "Monthly Expenses",  value: formatCurrency(expensesVal) },
+                { label: "Available Monthly",  value: formatCurrency(available) },
+                { label: "Total Debt",         value: formatCurrency(debtVal) },
+              ].map(function (item) {
+                return (
+                  <div key={item.label} style={{
+                    background: C.card, borderRadius: 8,
+                    padding: "18px 16px", border: "1px solid " + C.border,
+                  }}>
+                    <div style={{
+                      fontSize: 11, textTransform: "uppercase",
+                      letterSpacing: "0.06em", color: C.dim,
+                      marginBottom: 6, fontWeight: 500,
+                    }}>
+                      {item.label}
+                    </div>
+                    <div style={{
+                      fontSize: 22, fontWeight: 400, color: C.text,
+                      letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums",
+                    }}>
+                      {item.value}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Savings rate */}
+            {incomeVal > 0 && (
+              <div style={{
+                background: C.card, borderRadius: 8,
+                padding: "18px 16px", border: "1px solid " + C.border,
+                marginBottom: 24,
+              }}>
+                <div style={{
+                  display: "flex", justifyContent: "space-between",
+                  alignItems: "center",
+                }}>
+                  <div>
+                    <div style={{
+                      fontSize: 11, textTransform: "uppercase",
+                      letterSpacing: "0.06em", color: C.dim,
+                      marginBottom: 4, fontWeight: 500,
+                    }}>
+                      Savings Rate
+                    </div>
+                    <div style={{
+                      fontSize: 13, color: C.muted, lineHeight: 1.6,
+                    }}>
+                      {parseInt(savingsRate) > 0
+                        ? formatCurrency(available) + " per month working for you."
+                        : "Your expenses exceed your income. That's what we're here to fix."}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontSize: 32, fontWeight: 300, color: C.text,
+                    letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums",
+                    marginLeft: 20, flexShrink: 0,
+                  }}>
+                    {savingsRate}%
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mission echo */}
+            {mission.trim() && (
+              <div style={{
+                background: C.card, borderRadius: 8,
+                padding: "18px 16px", border: "1px solid " + C.border,
+                marginBottom: 24,
+              }}>
+                <div style={{
+                  fontSize: 11, textTransform: "uppercase",
+                  letterSpacing: "0.06em", color: C.dim,
+                  marginBottom: 8, fontWeight: 500,
+                }}>
+                  Your Goal
+                </div>
+                <p style={{
+                  fontSize: 14, color: C.muted, lineHeight: 1.7,
+                  margin: 0, fontStyle: "italic",
+                }}>
+                  "{mission}"
+                </p>
+              </div>
+            )}
+
+            {/* What happens next */}
+            <div style={{
+              borderTop: "1px solid " + C.border,
+              paddingTop: 20, marginBottom: 32,
+            }}>
+              <div style={{
+                fontSize: 11, textTransform: "uppercase",
+                letterSpacing: "0.06em", color: C.dim,
+                marginBottom: 12, fontWeight: 500,
+              }}>
+                What happens next
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {[
-                  { label: "Monthly Income", value: formatCurrency(incomeVal), color: "#3FB950" },
-                  { label: "Monthly Expenses", value: formatCurrency(expensesVal), color: "#F85149" },
-                  { label: "Available Monthly", value: formatCurrency(available), color: available >= 0 ? "#3FB950" : "#F85149" },
-                  { label: "Total Debt", value: formatCurrency(debtVal), color: debtVal > 0 ? "#F85149" : "#3FB950" },
+                  "Daily check-ins measure your Financial Confidence Score across 5 dimensions.",
+                  "Grace AI coaches you based on your behavioral patterns over time.",
+                  "Your anonymized data feeds the Grace Composite Index — real market intelligence.",
                 ].map(function (item, i) {
                   return (
                     <div key={i} style={{
-                      background: t.card, borderRadius: 14, padding: "20px 18px", border: "1px solid " + t.border,
+                      display: "flex", alignItems: "flex-start", gap: 12,
                     }}>
-                      <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: t.muted, marginBottom: 6, fontWeight: 500 }}>{item.label}</p>
-                      <p style={{ fontSize: 24, fontWeight: 700, color: item.color }}>{item.value}</p>
+                      <span style={{
+                        fontSize: 12, color: C.faint, fontWeight: 500,
+                        fontVariantNumeric: "tabular-nums",
+                        flexShrink: 0, width: 18, textAlign: "right",
+                      }}>
+                        {(i + 1) + "."}
+                      </span>
+                      <span style={{
+                        fontSize: 13, color: C.muted, lineHeight: 1.6,
+                      }}>
+                        {item}
+                      </span>
                     </div>
                   )
                 })}
               </div>
-            </FadeIn>
+            </div>
 
-            <FadeIn delay={900}>
-              <div style={{
-                background: t.accent + "10", border: "1px solid " + t.accent + "30",
-                borderRadius: 16, padding: "28px 24px", marginBottom: 16,
+            {/* CTA */}
+            <div style={{ textAlign: "center" }}>
+              <button
+                onClick={handleComplete}
+                style={Object.assign({}, btnStyle, { padding: "16px 56px", fontSize: 15 })}
+                onMouseEnter={function (e) { e.target.style.opacity = "0.85" }}
+                onMouseLeave={function (e) { e.target.style.opacity = "1" }}
+              >
+                Start Tracking
+              </button>
+
+              <p style={{
+                fontSize: 11, color: C.faint, marginTop: 16,
+                letterSpacing: "0.04em", textTransform: "uppercase",
               }}>
-                <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: t.accent, marginBottom: 12, fontWeight: 600 }}>
-                  🐾 GraceFinance Insight
-                </p>
-                {debtVal > 0 && available > 0 && (
-                  <p style={{ fontSize: 16, lineHeight: 1.6, fontWeight: 500, color: t.text }}>
-                    At your current pace, you could be debt-free in <span style={{ color: "#D29922", fontWeight: 700 }}>{debtFreeMonths} months</span>.
-                    With GraceFinance optimizing your spending, we'll target <span style={{ color: "#3FB950", fontWeight: 700 }}>{acceleratedMonths} months</span>.
-                  </p>
-                )}
-                {debtVal > 0 && available <= 0 && (
-                  <p style={{ fontSize: 16, lineHeight: 1.6, fontWeight: 500, color: t.text }}>
-                    You're spending more than you earn right now. That's exactly why you're here. GraceFinance will help you find the gaps and build a path forward.
-                  </p>
-                )}
-                {debtVal === 0 && available > 0 && (
-                  <p style={{ fontSize: 16, lineHeight: 1.6, fontWeight: 500, color: t.text }}>
-                    You're saving <span style={{ color: "#3FB950", fontWeight: 700 }}>{savingsRate}%</span> of your income.
-                    That's {formatCurrency(available)} every month building your future.
-                    {parseInt(savingsRate) >= 20 ? " You're outperforming most Americans. Let's accelerate." : " Let's push that higher together."}
-                  </p>
-                )}
-                {debtVal === 0 && available <= 0 && (
-                  <p style={{ fontSize: 16, lineHeight: 1.6, fontWeight: 500, color: t.text }}>
-                    No debt is great. But your expenses are eating everything. Let's find the leaks and redirect that cash to your goal.
-                  </p>
-                )}
-              </div>
-            </FadeIn>
-
-            {mission && (
-              <FadeIn delay={1100}>
-                <div style={{
-                  background: t.card, borderRadius: 14, padding: "22px 24px",
-                  border: "1px solid " + t.border, marginBottom: 32,
-                }}>
-                  <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: t.muted, marginBottom: 8, fontWeight: 500 }}>Your Mission</p>
-                  <p style={{ fontSize: 16, color: t.text, lineHeight: 1.6, fontStyle: "italic" }}>"{mission}"</p>
-                </div>
-              </FadeIn>
-            )}
-
-            <FadeIn delay={1300}>
-              <div style={{ textAlign: "center" }}>
-                <button onClick={handleComplete} style={Object.assign({}, btnStyle, { padding: "18px 56px", fontSize: 18 })}>
-                  Let's Build My Plan →
-                </button>
-                <p style={{ fontSize: 13, color: t.muted, marginTop: 16, opacity: 0.6 }}>
-                  Smarter Finance is Right Around the Corner™
-                </p>
-              </div>
-            </FadeIn>
+                GraceFinance™
+              </p>
+            </div>
           </div>
         )}
+
       </div>
 
-      {/* Step dots */}
+      {/* Step indicator */}
       {step !== "welcome" && step !== "snapshot" && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 32 }}>
+        <div style={{
+          display: "flex", justifyContent: "center",
+          gap: 6, marginTop: 40,
+        }}>
           {STEPS.slice(1, -1).map(function (s, i) {
             var idx = STEPS.indexOf(step) - 1
             return (
               <div key={s} style={{
-                width: i === idx ? 24 : 8, height: 8, borderRadius: 4,
-                background: i <= idx ? t.accent : t.border, transition: "all 0.3s",
+                width: i === idx ? 20 : 6, height: 3, borderRadius: 2,
+                background: i <= idx ? C.text : C.border,
+                transition: "all 0.3s ease",
               }} />
             )
           })}
