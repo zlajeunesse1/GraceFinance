@@ -14,9 +14,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 
-var API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:8000'
-  : 'https://gracefinance-production.up.railway.app'
+var API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
 
 export default function useTodayStatus() {
   var statusState = useState(null)

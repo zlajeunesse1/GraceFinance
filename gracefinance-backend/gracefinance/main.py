@@ -9,6 +9,7 @@ API docs available at:
     http://localhost:8000/docs
 """
 
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
@@ -40,14 +41,36 @@ app = FastAPI(
     version="1.1.0",
 )
 
+# ── Build allowed origins list dynamically ──
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+
+# Add FRONTEND_URL from env/settings if set
+if settings.frontend_url:
+    allowed_origins.append(settings.frontend_url)
+    allowed_origins.append(settings.frontend_url.rstrip("/"))
+
+# Add any Railway-provided URLs
+railway_public_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+if railway_public_domain:
+    allowed_origins.append("https://" + railway_public_domain)
+
+# Hardcode your known production URLs as backup
+allowed_origins.extend([
+    "https://gracefinance-production.up.railway.app",
+    "https://gracefinance.co",
+    "https://www.gracefinance.co",
+])
+
+# Deduplicate
+allowed_origins = list(set(o for o in allowed_origins if o))
+
 # CORS — allow your React frontend to talk to this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.frontend_url,     # http://localhost:3000 in dev
-        "http://localhost:3000",
-        "http://localhost:5173",    # Vite dev server
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

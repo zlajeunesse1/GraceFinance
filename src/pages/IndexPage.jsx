@@ -4,6 +4,7 @@
  * CHANGES:
  *   - [TIER 1] Fixed prop leak: replaced raw `activePage="index" /` with <NavBar /> component
  *   - [TIER 3] Changed "Live" badge to "Beta" when limited contributors
+ *   - [FIX] Switched API_BASE to use VITE_API_URL env var for production
  *
  * Place at: src/pages/IndexPage.jsx
  */
@@ -21,9 +22,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts"
 
-var API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:8000'
-  : 'https://gracefinance-production.up.railway.app'
+var API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
 
 function apiFetch(endpoint) {
   var token = localStorage.getItem("grace_token")

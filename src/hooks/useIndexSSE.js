@@ -14,9 +14,7 @@
 
 import { useState, useEffect, useRef } from "react"
 
-var API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:8000'
-  : 'https://gracefinance-production.up.railway.app'
+var API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
 
 export default function useIndexSSE() {
   var indexState = useState(null)
@@ -71,7 +69,6 @@ export default function useIndexSSE() {
       es.onopen = function () {
         setConnected(true)
         retryCount.current = 0
-        // Stop polling if it was active
         if (pollTimerRef.current) {
           clearInterval(pollTimerRef.current)
           pollTimerRef.current = null
@@ -82,20 +79,16 @@ export default function useIndexSSE() {
         setConnected(false)
         es.close()
 
-        // Exponential backoff: 1s, 2s, 4s, 8s, ..., max 30s
         var delay = Math.min(1000 * Math.pow(2, retryCount.current), 30000)
         retryCount.current++
 
-        // Fall back to polling while SSE is down
         if (!pollTimerRef.current) {
           startPolling()
         }
 
-        // Retry SSE connection
         setTimeout(connectSSE, delay)
       }
     } catch (e) {
-      // SSE not supported or blocked — use polling only
       setConnected(false)
       startPolling()
     }
@@ -104,7 +97,6 @@ export default function useIndexSSE() {
   function startPolling() {
     if (pollTimerRef.current) return
 
-    // Poll every 60 seconds as fallback
     pollTimerRef.current = setInterval(function () {
       var token = localStorage.getItem("grace_token")
       var headers = { "Content-Type": "application/json" }
@@ -125,12 +117,9 @@ export default function useIndexSSE() {
             setLastUpdated(data.last_updated_at)
           }
         })
-        .catch(function () {
-          // Silent fail — will retry next interval
-        })
+        .catch(function () {})
     }, 60000)
 
-    // Also fetch immediately
     var token = localStorage.getItem("grace_token")
     var headers = { "Content-Type": "application/json" }
     if (token) headers["Authorization"] = "Bearer " + token

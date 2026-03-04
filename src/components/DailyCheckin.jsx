@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTheme } from '../context/ThemeContext'
 
-var API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:8000'
-  : 'https://gracefinance-production.up.railway.app'
+var API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HELPER: Authenticated fetch
@@ -108,7 +106,6 @@ var dimensionConfig = {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function getScaleLabels(question) {
-  // Use API labels if available, fall back to generic
   var low = question.low_label || 'Low'
   var high = question.high_label || 'High'
   return { low: low, high: high }
@@ -123,10 +120,6 @@ function authHeaders() {
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
-   Props:
-     onCheckinComplete(metrics) — called after successful submit with the
-     canonical UserMetricsSnapshot from the response. DashboardPage uses
-     this to instantly refresh tiles without a network refetch.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function DailyCheckin(props) {
@@ -247,8 +240,6 @@ export default function DailyCheckin(props) {
       })
   }
 
-  // ── Helpers ──
-
   var currentQuestion = questions[currentIndex]
 
   var allAnswered = questions.length > 0 && questions.every(function (q) {
@@ -281,7 +272,6 @@ export default function DailyCheckin(props) {
     return 'scale_5'
   }
 
-  // ── Loading ──
   if (loading) {
     return (
       <div className="rounded-2xl p-8 border" style={{ background: theme.card, borderColor: theme.border }}>
@@ -296,7 +286,6 @@ export default function DailyCheckin(props) {
     )
   }
 
-  // ── Error ──
   if (error) {
     return (
       <div className="rounded-2xl p-8 border" style={{ background: theme.card, borderColor: theme.error + '50' }}>
@@ -314,7 +303,6 @@ export default function DailyCheckin(props) {
     )
   }
 
-  // ── Submitted / completion card ──
   if (submitted) {
     var fcsScore = result && result.metrics && result.metrics.fcs_total != null
       ? result.metrics.fcs_total
@@ -384,7 +372,6 @@ export default function DailyCheckin(props) {
     )
   }
 
-  // ── Already completed today ──
   if (questions.length === 0) {
     return (
       <div className="rounded-2xl p-8 border" style={{ background: theme.card, borderColor: theme.border }}>
@@ -399,7 +386,6 @@ export default function DailyCheckin(props) {
     )
   }
 
-  // ── Active check-in flow ──
   var qType = getQuestionType(currentQuestion)
   var dimColor = getDimensionColor(currentQuestion.dimension)
   var answered = isAnswered(currentQuestion)
@@ -408,7 +394,6 @@ export default function DailyCheckin(props) {
   return (
     <div className="rounded-2xl border overflow-hidden" style={{ background: theme.card, borderColor: theme.border }}>
 
-      {/* Header + progress */}
       <div className="px-8 pt-8 pb-4">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
@@ -434,7 +419,6 @@ export default function DailyCheckin(props) {
         </div>
       </div>
 
-      {/* Question */}
       <div className="px-8 py-6">
         <span
           className="inline-block text-xs font-semibold px-3 py-1 rounded-full mb-4"
@@ -447,7 +431,6 @@ export default function DailyCheckin(props) {
           {currentQuestion.question_text}
         </h2>
 
-        {/* 1-5 scale — NOW USES DYNAMIC LABELS */}
         {qType === 'scale_5' && (
           <div>
             <div className="flex justify-between mb-3">
@@ -479,7 +462,6 @@ export default function DailyCheckin(props) {
           </div>
         )}
 
-        {/* 1-10 slider — NOW USES DYNAMIC LABELS */}
         {qType === 'slider' && (
           <div>
             <div className="flex justify-between mb-3">
@@ -511,7 +493,6 @@ export default function DailyCheckin(props) {
           </div>
         )}
 
-        {/* Yes/No */}
         {qType === 'yes_no' && (
           <div className="flex gap-4">
             {[
@@ -540,7 +521,6 @@ export default function DailyCheckin(props) {
         )}
       </div>
 
-      {/* Navigation */}
       <div className="px-8 pb-8 flex items-center justify-between">
         <button
           onClick={function () { setCurrentIndex(function (p) { return p - 1 }) }}
