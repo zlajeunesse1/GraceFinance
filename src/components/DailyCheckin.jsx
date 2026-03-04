@@ -15,7 +15,7 @@ import { useState, useEffect } from 'react'
 var API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:8000'
   : 'https://gracefinance-production.up.railway.app'
-```
+
 
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
 
