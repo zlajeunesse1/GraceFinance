@@ -1,29 +1,29 @@
 """
-GraceFinance — Grace AI Coach Service (v2)
-============================================
-Now powered by the 3-Stream Behavioral Engine.
-Every response is informed by the full data picture.
+GraceFinance — Grace AI Coach Service (v2.1)
+==============================================
+Works immediately with or without the behavioral engine.
+Falls back to basic context if engine modules aren't deployed.
 
-Flow:
-  1. User sends message
-  2. Behavioral engine runs all 3 streams (check-in + pulse + NLP)
-  3. Context + proactive insights injected into Grace's system prompt
-  4. Claude responds with full awareness of user's financial state
-  5. Conversation themes detected and logged back into user profile
-  6. Next time user talks to Grace, she remembers what they discussed
-
-Place at: app/services/grace_service.py (replaces v1)
+Changes from v2:
+  - Graceful import fallback for behavioral_engine + intelligence_engine
+  - Removed paw emoji from intro greeting
+  - Basic user context pulled directly from DB when engine unavailable
 """
 
 import os
 import anthropic
 from sqlalchemy.orm import Session
 
-from app.services.intelligence_engine import (
-    log_conversation_themes,
-    generate_proactive_insights,
-)
-from app.services.behavioral_engine import UserProfileBuilder
+# ── Graceful imports — engine may not be deployed yet ──
+try:
+    from app.services.intelligence_engine import (
+        log_conversation_themes,
+        generate_proactive_insights,
+    )
+    from app.services.behavioral_engine import UserProfileBuilder
+    HAS_ENGINE = True
+except ImportError:
+    HAS_ENGINE = False
 
 
 GRACE_SYSTEM_PROMPT = """You are Grace, the GraceFinance AI financial coach.
@@ -56,9 +56,6 @@ WHAT YOU CAN DO:
 - Provide general financial education and literacy.
 - Help set realistic, achievable money goals.
 - When you have their data, reference specific numbers naturally.
-- When pattern alerts are flagged, weave them into conversation.
-- If peer comparison data is available, use it to motivate (never shame).
-- When you know their recent conversation topics, show continuity.
 
 STRICT GUARDRAILS:
 1. NEVER recommend specific investments, stocks, bonds, crypto, or securities.
@@ -76,53 +73,114 @@ RESPONSE STYLE:
 - Reference their data naturally — "Your stability score jumped this week" not "According to your data..."
 - Use simple analogies for financial concepts.
 
-PROACTIVE COACHING:
-- If you see pattern alerts in the context, address them naturally.
-- If a dimension dropped, ask about it gently.
-- If they're on a streak, acknowledge it without being over-the-top.
-- If BSI shows contraction, be extra empathetic about spending pressure.
-- If they discussed a topic recently, show you remember.
-
 DISCLAIMER (include naturally when giving financial guidance, skip for casual chat):
 "Just a reminder — I'm your coach, not a financial advisor. For specific investment or tax decisions, a licensed professional is the way to go."
 """
 
 
+def _build_basic_context(db: Session, user_id: int) -> str:
+    """
+    Build basic user context directly from DB when behavioral engine
+    is not available. Pulls FCS scores and user info.
+    """
+    context_parts = []
+
+    try:
+        from app.models import User
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            name = getattr(user, "first_name", None)
+            if name:
+                context_parts.append(f"User's name: {name}")
+    except Exception:
+        pass
+
+    try:
+        from app.models import CheckInResponse
+        from sqlalchemy import func
+
+        # Get latest check-in data
+        latest = (
+            db.query(CheckInResponse)
+            .filter(CheckInResponse.user_id == user_id)
+            .order_by(CheckInResponse.created_at.desc())
+            .limit(10)
+            .all()
+        )
+
+        if latest:
+            context_parts.append(f"User has completed {len(latest)} recent check-ins.")
+    except Exception:
+        pass
+
+    try:
+        from app.models import FCSSnapshot
+
+        snapshot = (
+            db.query(FCSSnapshot)
+            .filter(FCSSnapshot.user_id == user_id)
+            .order_by(FCSSnapshot.computed_at.desc())
+            .first()
+        )
+
+        if snapshot:
+            fcs = getattr(snapshot, "fcs_composite", None)
+            if fcs is not None:
+                context_parts.append(f"Current FCS score: {round(fcs, 1)}")
+
+            # Pull dimension scores if available
+            dims = {}
+            for dim_name in ["stability", "outlook", "purchasing_power", "emergency_readiness", "income_adequacy"]:
+                val = getattr(snapshot, dim_name, None)
+                if val is not None:
+                    dims[dim_name] = round(val, 1)
+            if dims:
+                dim_str = ", ".join(f"{k}: {v}" for k, v in dims.items())
+                context_parts.append(f"Dimension scores: {dim_str}")
+    except Exception:
+        pass
+
+    if context_parts:
+        return "\n\n[USER CONTEXT]\n" + "\n".join(context_parts)
+    return ""
+
+
 def chat_with_grace(db: Session, user_id: int, messages: list[dict]) -> str:
     """
-    Send a conversation to Claude with full intelligence context.
-
-    Args:
-        db: Database session
-        user_id: Current user's ID
-        messages: Conversation history [{"role": "user"|"assistant", "content": "..."}]
-
-    Returns:
-        Grace's response text
+    Send a conversation to Claude with intelligence context.
+    Falls back to basic context if behavioral engine isn't deployed.
     """
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY not set. Add it to your .env file.")
+        raise ValueError("ANTHROPIC_API_KEY not set. Add it to your environment variables.")
 
-    # 1. Build full context from behavioral engine (3-stream)
-    profile = UserProfileBuilder().build(db, user_id, messages)
-    user_context = profile.to_grace_context()
-
-    # 2. Get proactive insights for Grace to weave in
-    insights = generate_proactive_insights(db, user_id)
+    # Build context — use engine if available, otherwise basic DB query
+    user_context = ""
     insight_block = ""
-    if insights:
-        high_priority = [i for i in insights if i["priority"] == "high"]
-        if high_priority:
-            insight_block = (
-                "\n\n[PROACTIVE COACHING OPPORTUNITIES — weave naturally, don't force]\n"
-                + "\n".join(f"  - {ins['message']}" for ins in high_priority[:3])
-            )
 
-    # 3. Assemble the full system prompt
+    if HAS_ENGINE:
+        try:
+            profile = UserProfileBuilder().build(db, user_id, messages)
+            user_context = profile.to_grace_context()
+
+            insights = generate_proactive_insights(db, user_id)
+            if insights:
+                high_priority = [i for i in insights if i.get("priority") == "high"]
+                if high_priority:
+                    insight_block = (
+                        "\n\n[PROACTIVE COACHING OPPORTUNITIES]\n"
+                        + "\n".join(f"  - {ins['message']}" for ins in high_priority[:3])
+                    )
+        except Exception:
+            # Engine exists but errored — fall back to basic
+            user_context = _build_basic_context(db, user_id)
+    else:
+        user_context = _build_basic_context(db, user_id)
+
+    # Assemble system prompt
     system_prompt = GRACE_SYSTEM_PROMPT + user_context + insight_block
 
-    # 4. Call Claude
+    # Call Claude
     client = anthropic.Anthropic(api_key=api_key)
 
     response = client.messages.create(
@@ -134,13 +192,15 @@ def chat_with_grace(db: Session, user_id: int, messages: list[dict]) -> str:
 
     response_text = response.content[0].text
 
-    # 5. Log conversation themes from behavioral engine's NLP stream
-    try:
-        if profile.nlp_themes:
-            theme_names = [t["theme"] for t in profile.nlp_themes]
-            log_conversation_themes(db, user_id, theme_names)
-    except Exception:
-        pass  # Never let theme logging break the response
+    # Log themes if engine available
+    if HAS_ENGINE:
+        try:
+            profile = UserProfileBuilder().build(db, user_id, messages)
+            if profile.nlp_themes:
+                theme_names = [t["theme"] for t in profile.nlp_themes]
+                log_conversation_themes(db, user_id, theme_names)
+        except Exception:
+            pass
 
     return response_text
 
@@ -148,7 +208,6 @@ def chat_with_grace(db: Session, user_id: int, messages: list[dict]) -> str:
 def get_grace_intro(db: Session, user_id: int) -> dict:
     """
     Generate a personalized intro for the Grace chat page.
-    Uses intelligence engine context to customize greeting and suggestions.
     """
     user_name = None
     try:
@@ -161,32 +220,33 @@ def get_grace_intro(db: Session, user_id: int) -> dict:
 
     name_str = user_name if user_name else "there"
 
-    # Get insights to customize suggestion chips
-    insights = generate_proactive_insights(db, user_id)
-    insight_types = [i["type"] for i in insights]
-
-    # Base suggestion chips
+    # Get insights if engine available
     suggestions = [
         "Why do I stress about money even when I'm okay?",
         "How do I start building an emergency fund?",
-        "I just overspent — help me not feel terrible",
+        "I just overspent — help me think through it",
         "What does my FCS score actually mean?",
         "Help me set a realistic money goal",
     ]
 
-    # Customize chips based on insights
-    if "behavioral_stress" in insight_types:
-        suggestions.insert(0, "I'm feeling financially overwhelmed right now")
-    if "milestone" in insight_types:
-        suggestions.insert(0, "I hit a new milestone — what's next?")
-    if "streak" in insight_types:
-        suggestions.insert(0, "I've been consistent — how do I keep going?")
+    if HAS_ENGINE:
+        try:
+            insights = generate_proactive_insights(db, user_id)
+            insight_types = [i["type"] for i in insights]
 
-    # Keep top 5
-    suggestions = suggestions[:5]
+            if "behavioral_stress" in insight_types:
+                suggestions.insert(0, "I'm feeling financially overwhelmed right now")
+            if "milestone" in insight_types:
+                suggestions.insert(0, "I hit a new milestone — what's next?")
+            if "streak" in insight_types:
+                suggestions.insert(0, "I've been consistent — how do I keep going?")
+
+            suggestions = suggestions[:5]
+        except Exception:
+            pass
 
     return {
-        "greeting": f"Hey {name_str}, I'm Grace 🐾",
-        "subtitle": "Your financial coach — powered by your real FCS data",
+        "greeting": f"Hey {name_str}, I'm Grace — your financial coach. What's on your mind?",
+        "subtitle": "Powered by your real FCS data",
         "suggestions": suggestions,
     }
