@@ -51,12 +51,10 @@ def save_responses(db: Session, user_id: int, answers: list) -> List[CheckInResp
             user_id=user_id,
             question_id=qid,
             dimension=question.dimension,
-            question_text=question.question_text,
             raw_value=raw,
             scale_max=question.scale_max,
             normalized_value=normalized,
             checkin_date=now,
-            is_weekly=question.is_weekly,
         )
         db.add(response)
         saved.append(response)
