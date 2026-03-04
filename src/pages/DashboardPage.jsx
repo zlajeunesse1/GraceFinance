@@ -24,7 +24,7 @@ import OnboardingPage from "./OnboardingPage"
 var API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:8000'
   : 'https://gracefinance-production.up.railway.app'
-```
+
 
 function apiFetch(endpoint, options) {
   var token = localStorage.getItem("grace_token")
