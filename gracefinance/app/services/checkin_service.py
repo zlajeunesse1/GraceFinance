@@ -24,8 +24,8 @@ FCS_WEIGHTS = {
     "current_stability": 0.30,
     "future_outlook": 0.25,
     "purchasing_power": 0.20,
-    "debt_pressure": 0.15,       # was debt_pressure
-    "financial_agency": 0.10,    # was financial_agency
+    "debt_pressure": 0.15,
+    "financial_agency": 0.10,
 }
 
 
@@ -80,7 +80,6 @@ def compute_user_snapshot(db: Session, user_id: int) -> UserMetricSnapshot:
             and_(
                 CheckInResponse.user_id == user_id,
                 CheckInResponse.checkin_date >= window_start,
-                CheckInResponse.is_weekly == False,  # noqa: E712
             )
         )
         .all()
@@ -96,8 +95,8 @@ def compute_user_snapshot(db: Session, user_id: int) -> UserMetricSnapshot:
             current_stability=None,
             future_outlook=None,
             purchasing_power=None,
-            debt_pressure=None,          # was debt_pressure
-            financial_agency=None,       # was financial_agency
+            debt_pressure=None,
+            financial_agency=None,
             fcs_composite=None,
             bsi_score=None,
             checkin_count=0,
@@ -145,8 +144,8 @@ def compute_user_snapshot(db: Session, user_id: int) -> UserMetricSnapshot:
         current_stability=dim_averages.get("current_stability"),
         future_outlook=dim_averages.get("future_outlook"),
         purchasing_power=dim_averages.get("purchasing_power"),
-        debt_pressure=dim_averages.get("debt_pressure"),          # was debt_pressure
-        financial_agency=dim_averages.get("financial_agency"),    # was financial_agency
+        debt_pressure=dim_averages.get("debt_pressure"),
+        financial_agency=dim_averages.get("financial_agency"),
         fcs_composite=fcs_composite,
         bsi_score=bsi_score,
         checkin_count=len(responses),
@@ -196,7 +195,6 @@ def _compute_bsi(db: Session, user_id: int, start: datetime, end: datetime) -> O
                 CheckInResponse.user_id == user_id,
                 CheckInResponse.checkin_date >= start,
                 CheckInResponse.checkin_date <= end,
-                CheckInResponse.is_weekly == True,  # noqa: E712
             )
         )
         .all()
@@ -205,12 +203,10 @@ def _compute_bsi(db: Session, user_id: int, start: datetime, end: datetime) -> O
     if not weekly_responses:
         return None
 
-    # BSI: each response is 1-5 where 1=stress behavior, 5=stable
-    # Normalize to [-100, +100]: (avg - 3) / 2 * 100
     total = sum(r.normalized_value for r in weekly_responses)
     avg = total / len(weekly_responses)
 
-    bsi = (avg - 0.5) * 200  # 0.0→-100, 0.5→0, 1.0→+100
+    bsi = (avg - 0.5) * 200
     return round(bsi, 2)
 
 
