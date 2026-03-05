@@ -62,6 +62,7 @@ def chat(
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
+        print(f"Grace chat error: {type(e).__name__}: {str(e)}")
         raise HTTPException(status_code=502, detail=f"Grace is unavailable: {str(e)}")
 
     return GraceChatResponse(response=response_text)
@@ -82,7 +83,7 @@ def get_intro(user: User = Depends(get_current_user)):
         ),
         suggestions=[
             "Why do I stress about money even when I'm okay?",
-            "How do I start building an emergency fund?",
+            "How do I start building fiancial awareness?",
             "I just overspent — help me not feel terrible",
             "What does my FCS score actually mean?",
             "Help me set a realistic money goal",
