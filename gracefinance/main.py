@@ -71,7 +71,7 @@ allowed_origins.extend([
     "https://gracefinance-frontend.pages.dev",
 ])
 
-allowed_origins = list(set(allowed_origins))
+allowed_origins = list(set(filter(None, allowed_origins)))
 
 app.add_middleware(
     CORSMiddleware,
