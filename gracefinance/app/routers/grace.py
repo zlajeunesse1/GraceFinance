@@ -8,6 +8,7 @@ Endpoints:
   GET  /grace/intro  → Get Grace's introduction for new users
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -17,6 +18,7 @@ from app.models import User
 from app.services.auth import get_current_user
 from app.services.grace_service import chat_with_grace
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/grace", tags=["Grace AI Coach"])
 
@@ -62,7 +64,7 @@ def chat(
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        print(f"Grace chat error: {type(e).__name__}: {str(e)}")
+        logger.error(f"Grace chat error: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=502, detail=f"Grace is unavailable: {str(e)}")
 
     return GraceChatResponse(response=response_text)
@@ -83,7 +85,7 @@ def get_intro(user: User = Depends(get_current_user)):
         ),
         suggestions=[
             "Why do I stress about money even when I'm okay?",
-            "How do I start building fiancial awareness?",
+            "How do I start building an emergency fund?",
             "I just overspent — help me not feel terrible",
             "What does my FCS score actually mean?",
             "Help me set a realistic money goal",
