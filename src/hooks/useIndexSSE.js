@@ -1,12 +1,12 @@
 /**
- * useIndexSSE — Hook for real-time index updates via SSE.
+ * useIndexSSE — Hook for index updates.
  *
- * Connects to GET /events/index via Server-Sent Events.
- * Falls back to polling GET /index/summary on disconnect.
+ * Polls GET /index/latest every 60 seconds.
+ * SSE support can be added later when the backend has an events endpoint.
  *
  * Returns:
  *   indexData: latest index snapshot (or null)
- *   connected: boolean (SSE connection status)
+ *   connected: boolean (polling active)
  *   lastUpdated: ISO timestamp of last received update
  *
  * Place at: src/hooks/useIndexSSE.js
@@ -14,7 +14,9 @@
 
 import { useState, useEffect, useRef } from "react"
 
-var API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
+var API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : 'https://gracefinance-production.up.railway.app'
 
 export default function useIndexSSE() {
   var indexState = useState(null)
@@ -29,117 +31,47 @@ export default function useIndexSSE() {
   var lastUpdated = lastUpdatedState[0]
   var setLastUpdated = lastUpdatedState[1]
 
-  var retryCount = useRef(0)
-  var eventSourceRef = useRef(null)
   var pollTimerRef = useRef(null)
 
   useEffect(function () {
-    connectSSE()
+    fetchLatest()
+    pollTimerRef.current = setInterval(fetchLatest, 60000)
 
     return function () {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-      }
       if (pollTimerRef.current) {
         clearInterval(pollTimerRef.current)
       }
     }
   }, [])
 
-  function connectSSE() {
-    try {
-      var es = new EventSource(API_BASE + "/api/v1/events/index")
-      eventSourceRef.current = es
-
-      es.addEventListener("index_updated", function (event) {
-        try {
-          var data = JSON.parse(event.data)
-          setIndexData(data)
-          setLastUpdated(data.timestamp || new Date().toISOString())
-          retryCount.current = 0
-        } catch (e) {
-          console.warn("Failed to parse SSE index data:", e)
-        }
-      })
-
-      es.addEventListener("heartbeat", function () {
-        // Connection is alive
-      })
-
-      es.onopen = function () {
-        setConnected(true)
-        retryCount.current = 0
-        if (pollTimerRef.current) {
-          clearInterval(pollTimerRef.current)
-          pollTimerRef.current = null
-        }
-      }
-
-      es.onerror = function () {
-        setConnected(false)
-        es.close()
-
-        var delay = Math.min(1000 * Math.pow(2, retryCount.current), 30000)
-        retryCount.current++
-
-        if (!pollTimerRef.current) {
-          startPolling()
-        }
-
-        setTimeout(connectSSE, delay)
-      }
-    } catch (e) {
-      setConnected(false)
-      startPolling()
-    }
-  }
-
-  function startPolling() {
-    if (pollTimerRef.current) return
-
-    pollTimerRef.current = setInterval(function () {
-      var token = localStorage.getItem("grace_token")
-      var headers = { "Content-Type": "application/json" }
-      if (token) headers["Authorization"] = "Bearer " + token
-
-      fetch(API_BASE + "/api/v1/index/summary", { headers: headers })
-        .then(function (res) { return res.json() })
-        .then(function (data) {
-          if (data.current) {
-            setIndexData({
-              gci: data.current.gci,
-              csi: data.current.csi,
-              dpi: data.current.dpi,
-              frs: data.current.frs,
-              trend: data.current.trend_direction,
-              contributors: data.active_contributors_today,
-            })
-            setLastUpdated(data.last_updated_at)
-          }
-        })
-        .catch(function () {})
-    }, 60000)
-
+  function fetchLatest() {
     var token = localStorage.getItem("grace_token")
     var headers = { "Content-Type": "application/json" }
     if (token) headers["Authorization"] = "Bearer " + token
 
-    fetch(API_BASE + "/api/v1/index/summary", { headers: headers })
-      .then(function (res) { return res.json() })
+    fetch(API_BASE + "/index/latest", { headers: headers })
+      .then(function (res) {
+        if (!res.ok) throw new Error("Failed")
+        return res.json()
+      })
       .then(function (data) {
-        if (data.current) {
+        if (data.published) {
           setIndexData({
-            gci: data.current.gci,
-            csi: data.current.csi,
-            dpi: data.current.dpi,
-            frs: data.current.frs,
-            trend: data.current.trend_direction,
-            contributors: data.active_contributors_today,
+            gfci: data.gfci_composite,
+            fcs: data.fcs_average,
+            users: data.user_count,
+            trend: data.trend_direction,
+            slope_3d: data.gci_slope_3d,
+            slope_7d: data.gci_slope_7d,
+            volatility: data.gci_volatility_7d,
           })
-          setLastUpdated(data.last_updated_at)
+          setLastUpdated(data.index_date)
+          setConnected(true)
         }
       })
-      .catch(function () {})
+      .catch(function () {
+        setConnected(false)
+      })
   }
 
   return {
