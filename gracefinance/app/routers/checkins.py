@@ -72,7 +72,7 @@ def get_questions(
 ):
     """
     Serve today's check-in questions.
-    Daily: 4 rotating FCS questions.
+    Daily: 5 rotating FCS questions (one per dimension).
     Sundays: also includes 5 weekly BSI questions.
     Returns empty lists + already_completed=True if user already checked in today.
     """
@@ -188,7 +188,6 @@ def submit_checkin(
     )
 
     # 7. Build canonical snapshot — powers all dashboard tiles
-    # getattr guards against current_streak not yet existing on older User rows
     metrics_snapshot = _build_snapshot(
         latest=snapshot,
         previous=previous_snapshot,
@@ -199,8 +198,8 @@ def submit_checkin(
     return {
         "message": "Check-in saved successfully",
         "responses_saved": len(saved),
-        "fcs_snapshot": float(snapshot.fcs_composite or 0),  # backward compat
-        "metrics": metrics_snapshot,                          # canonical snapshot
+        "fcs_snapshot": float(snapshot.fcs_composite or 0),
+        "metrics": metrics_snapshot,
         "reward": reward,
     }
 
@@ -226,11 +225,11 @@ def get_metrics(
                 current_stability=s.current_stability,
                 future_outlook=s.future_outlook,
                 purchasing_power=s.purchasing_power,
-                debt_pressure=s.debt_pressure,
+                emergency_readiness=s.emergency_readiness,
                 financial_agency=s.financial_agency,
                 fcs_composite=s.fcs_composite,
                 bsi_score=s.bsi_score,
-                checkin_count=s.checkin_count,
+                checkin_count=s.checkin_count or 0,
             )
             for s in snapshots
         ],
