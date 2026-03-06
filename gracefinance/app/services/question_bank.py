@@ -1,20 +1,33 @@
 """
-Question Bank — v3.0 (Emergency Readiness Edition)
-═══════════════════════════════════════════════════
-CHANGES FROM v2.1:
-  - LOCKED PILLARS: stability / outlook / purchasing_power /
-                    emergency_readiness / financial_agency
-  - debt_pressure REMOVED — replaced by emergency_readiness (ER-*)
-  - FCS_WEIGHTS updated: emergency_readiness = 0.15
-  - All DP-* questions retired; four new ER-* questions added
-  - Normalization contract documented (frontend must send raw 1..scale_max)
+Question Bank — v4.0 (Institutional Behavioral Edition)
+═══════════════════════════════════════════════════════════
+PHILOSOPHY CHANGE FROM v3.0:
 
-REPLACES: app/services/question_bank.py
+  v3 questions measured SENTIMENT: "How stressed are you?"
+  v4 questions measure BEHAVIOR:   "Did you miss a payment?"
+
+  This aligns with the GraceFinance institutional mandate:
+  behavioral financial data, not opinion surveys.
+
+  Every question now asks about a CONCRETE ACTION or
+  OBSERVABLE FINANCIAL STATE — not a feeling.
+
+PILLAR ALIGNMENT (unchanged):
+  Stability         30%   Payment compliance, income predictability
+  Outlook           25%   Saving actions, goal progress, debt trajectory
+  Purchasing Power  20%   Consumption shifts, self-sufficiency
+  Emergency Ready.  15%   Cushion building, liquidity, shock absorption
+  Financial Agency  10%   Engagement, automation, proactive management
+
+NORMALIZATION CONTRACT:
+  Frontend sends raw_value as integer 1..scale_max.
+  checkin_service normalizes: (raw - 1) / (scale_max - 1)
+  Inverted questions flipped at normalization time.
 """
 
 import random
 from datetime import date
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Dict
 
 
@@ -24,7 +37,7 @@ class CheckInQuestion:
     question_text: str
     dimension: str
     scale_type: str          # "1-5" | "1-10" | "yes_no_scale"
-    scale_max: int           # raw answer range top (raw answer is always 1..scale_max)
+    scale_max: int
     low_label: str = "Low"
     high_label: str = "High"
     is_weekly: bool = False
@@ -35,14 +48,13 @@ class CheckInQuestion:
 # ══════════════════════════════════════════
 
 FCS_WEIGHTS: Dict[str, float] = {
-    "current_stability":    0.30,   # How secure you feel RIGHT NOW
-    "future_outlook":       0.25,   # Where you think you're heading
-    "purchasing_power":     0.20,   # Real-world spending strength
-    "emergency_readiness":  0.15,   # Resilience & cushion
-    "financial_agency":     0.10,   # Sense of control & intentionality
+    "current_stability":    0.30,
+    "future_outlook":       0.25,
+    "purchasing_power":     0.20,
+    "emergency_readiness":  0.15,
+    "financial_agency":     0.10,
 }
 
-# Sanity check — never let this drift
 assert abs(sum(FCS_WEIGHTS.values()) - 1.0) < 1e-9, "FCS_WEIGHTS must sum to 1.0"
 
 # Human-readable dimension labels + coaching context
@@ -50,252 +62,245 @@ DIMENSION_META: Dict[str, Dict] = {
     "current_stability": {
         "label": "Stability",
         "weight": FCS_WEIGHTS["current_stability"],
-        "description": "How secure you feel about your finances right now.",
-        "tip": "Set up autopay for your biggest bills — knowing they're covered cuts daily stress immediately.",
+        "description": "Predictability and consistency of your financial obligations and income.",
+        "tip": "Set up autopay for recurring bills — consistency is the foundation of stability.",
         "icon": "🏛️",
     },
     "future_outlook": {
         "label": "Outlook",
         "weight": FCS_WEIGHTS["future_outlook"],
-        "description": "How optimistic you are about where your finances are heading.",
-        "tip": "Write down one financial goal you want to hit in 90 days. Clarity drives confidence.",
+        "description": "Your forward financial trajectory based on actions you're taking now.",
+        "tip": "One saving or investing action per week shifts your trajectory meaningfully over 90 days.",
         "icon": "🔭",
     },
     "purchasing_power": {
         "label": "Purchasing Power",
         "weight": FCS_WEIGHTS["purchasing_power"],
-        "description": "Whether your money feels like it goes as far as it used to.",
-        "tip": "Track 3 grocery swaps this week. Small wins add up to big savings.",
+        "description": "Your real-world spending capacity after obligations.",
+        "tip": "Track whether you're downgrading purchases — it's an early signal of pressure.",
         "icon": "💳",
     },
     "emergency_readiness": {
         "label": "Emergency Readiness",
         "weight": FCS_WEIGHTS["emergency_readiness"],
-        "description": "How prepared you are to absorb a financial shock without going backward.",
-        "tip": "Open a dedicated account and auto-transfer even $10/week. The habit matters more than the amount.",
+        "description": "Your ability to absorb a financial shock without going backward.",
+        "tip": "Auto-transfer even $10/week to a separate account. The habit matters more than the amount.",
         "icon": "🛡️",
     },
     "financial_agency": {
         "label": "Financial Agency",
         "weight": FCS_WEIGHTS["financial_agency"],
-        "description": "Whether you feel empowered to improve your situation or stuck in place.",
-        "tip": "List one skill you could develop in 6 months that would meaningfully increase your earning power.",
+        "description": "Whether you're actively managing your finances or running on autopilot.",
+        "tip": "Review your spending for 5 minutes this week. Awareness alone changes behavior.",
         "icon": "⚡",
     },
 }
 
 
-# ══════════════════════════════════════════════════════════════════
-#  NORMALIZATION CONTRACT
-#  Frontend always sends raw_value as integer 1..scale_max.
-#  checkin_service normalizes via: (raw - 1) / (scale_max - 1)
-#  This maps:  raw=1  → 0.0  (worst)
-#              raw=max → 1.0  (best)
-#
-#  For yes_no_scale (scale_max = 5):
-#    raw=1 = low_label answer (usually the NEGATIVE outcome)
-#    raw=5 = high_label answer (usually the POSITIVE outcome)
-#  Frontend maps the Yes/No tap to raw=1 or raw=5 accordingly.
-# ══════════════════════════════════════════════════════════════════
-
-
 # ══════════════════════════════════════════
-#  DAILY FCS QUESTIONS
+#  DAILY FCS QUESTIONS — BEHAVIORAL SIGNALS
 # ══════════════════════════════════════════
 
 DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
 
     # ── CURRENT STABILITY (30%) ─────────────────────────────────────────────
-    # Goal: measure perceived security & stress today
+    # Behavioral signals: payment compliance, income predictability, account health
 
     "CS-1": CheckInQuestion(
         "CS-1",
-        "How confident are you that you can cover all your bills this month?",
-        "current_stability", "1-5", 5,
-        low_label="Not confident at all",
-        high_label="Completely confident",
+        "Did you pay all your bills on time this week?",
+        "current_stability", "yes_no_scale", 5,
+        low_label="No — missed or late",
+        high_label="Yes — all on time",
     ),
     "CS-2": CheckInQuestion(
         "CS-2",
-        "If an unexpected $500 expense hit today, how stressed would that make you?",
-        "current_stability", "1-10", 10,
-        low_label="Not stressed at all",
-        high_label="Completely overwhelmed",
-        # NOTE: high raw = high stress = BAD — checkin_service handles inversion
-        # via the `inverted` flag below
+        "Did you experience any unexpected expenses this week?",
+        "current_stability", "yes_no_scale", 5,
+        low_label="Yes — unexpected hit",
+        high_label="No — everything expected",
+        # INVERTED: Yes = disruption = bad
     ),
     "CS-3": CheckInQuestion(
         "CS-3",
-        "How would you rate your overall financial stress level today?",
-        "current_stability", "1-10", 10,
-        low_label="No stress",
-        high_label="Overwhelming stress",
-        # Also inverted — high stress = low stability
+        "Did your income arrive when expected this pay period?",
+        "current_stability", "yes_no_scale", 5,
+        low_label="No — delayed or short",
+        high_label="Yes — on time and full",
     ),
     "CS-4": CheckInQuestion(
         "CS-4",
-        "Did you have to choose between two necessary expenses this week?",
-        "current_stability", "yes_no_scale", 5,
-        low_label="Yes",     # Yes = bad → raw=1 → normalized=0.0
-        high_label="No",     # No  = good → raw=5 → normalized=1.0
+        "How many days this week did you check your bank balance or financial accounts?",
+        "current_stability", "1-5", 5,
+        low_label="0 days",
+        high_label="5+ days",
     ),
     "CS-5": CheckInQuestion(
         "CS-5",
-        "How in control of your day-to-day finances do you feel right now?",
-        "current_stability", "1-5", 5,
-        low_label="Completely out of control",
-        high_label="Fully in control",
+        "Did you overdraft, use overdraft protection, or bounce a payment this month?",
+        "current_stability", "yes_no_scale", 5,
+        low_label="Yes",
+        high_label="No",
+        # INVERTED: Yes = account stress = bad
     ),
 
     # ── FUTURE OUTLOOK (25%) ────────────────────────────────────────────────
-    # Goal: capture forward-looking financial sentiment
+    # Behavioral signals: saving actions, goal progress, debt trajectory
 
     "FO-1": CheckInQuestion(
         "FO-1",
-        "Looking 3 months ahead, do you think your financial situation will be better, the same, or worse?",
-        "future_outlook", "1-5", 5,
-        low_label="Much worse",
-        high_label="Much better",
+        "Did you make a contribution to savings or investments this week?",
+        "future_outlook", "yes_no_scale", 5,
+        low_label="No",
+        high_label="Yes",
     ),
     "FO-2": CheckInQuestion(
         "FO-2",
-        "How confident are you that your income will keep up with your expenses over the next 6 months?",
-        "future_outlook", "1-10", 10,
-        low_label="Not confident at all",
-        high_label="Very confident",
+        "Did you set, review, or make progress on a financial goal this week?",
+        "future_outlook", "yes_no_scale", 5,
+        low_label="No",
+        high_label="Yes",
     ),
     "FO-3": CheckInQuestion(
         "FO-3",
-        "Do you feel like you're making progress toward your financial goals, or falling behind?",
-        "future_outlook", "1-5", 5,
-        low_label="Falling further behind",
-        high_label="Strong progress",
+        "Did you take any action to increase your income this month? (side work, negotiation, upskilling)",
+        "future_outlook", "yes_no_scale", 5,
+        low_label="No",
+        high_label="Yes",
     ),
     "FO-4": CheckInQuestion(
         "FO-4",
-        "How optimistic are you about your personal financial trajectory right now?",
-        "future_outlook", "1-10", 10,
-        low_label="Very pessimistic",
-        high_label="Very optimistic",
+        "Compared to 30 days ago, is your total debt balance lower, the same, or higher?",
+        "future_outlook", "1-5", 5,
+        low_label="Much higher",
+        high_label="Much lower",
     ),
 
     # ── PURCHASING POWER (20%) ───────────────────────────────────────────────
-    # Goal: measure real-world spending strength vs. cost pressures
+    # Behavioral signals: consumption shifts, spending capacity, self-sufficiency
 
     "PP-1": CheckInQuestion(
         "PP-1",
-        "Compared to 6 months ago, does your paycheck feel like it goes further, the same, or not as far?",
-        "purchasing_power", "1-5", 5,
-        low_label="Much less far",
-        high_label="Much further",
+        "Did you have to skip or reduce a regular purchase this week to save money?",
+        "purchasing_power", "yes_no_scale", 5,
+        low_label="Yes — had to cut back",
+        high_label="No — bought what I needed",
+        # INVERTED: Yes = pressure signal
     ),
     "PP-2": CheckInQuestion(
         "PP-2",
-        "Have you noticed prices going up on things you buy regularly?",
-        "purchasing_power", "1-5", 5,
-        low_label="Yes, significantly",
-        high_label="No, prices feel stable",
+        "Did you switch to a cheaper brand or alternative for something you regularly buy?",
+        "purchasing_power", "yes_no_scale", 5,
+        low_label="Yes — downgraded",
+        high_label="No — same as usual",
+        # INVERTED: Yes = purchasing pressure
     ),
     "PP-3": CheckInQuestion(
         "PP-3",
-        "In the last month, have you switched to cheaper alternatives for things you normally buy?",
+        "Were you able to cover all essential expenses this week without borrowing?",
         "purchasing_power", "yes_no_scale", 5,
-        low_label="Yes",    # Yes = stress signal → raw=1 → 0.0
-        high_label="No",    # No  = stable → raw=5 → 1.0
+        low_label="No — had to borrow or use credit",
+        high_label="Yes — covered everything",
     ),
     "PP-4": CheckInQuestion(
         "PP-4",
-        "How fair do you feel your current cost of living is relative to your income?",
-        "purchasing_power", "1-10", 10,
-        low_label="Very unfair — barely covering basics",
-        high_label="Very fair — income covers everything comfortably",
+        "Did you delay any planned purchase because of financial uncertainty?",
+        "purchasing_power", "yes_no_scale", 5,
+        low_label="Yes — delayed",
+        high_label="No — on track",
+        # INVERTED: Yes = deferral signal
     ),
 
     # ── EMERGENCY READINESS (15%) ────────────────────────────────────────────
-    # Goal: measure resilience, cushion depth, and shock-absorption capacity
-    # Replaces: debt_pressure (DP-*)
+    # Behavioral signals: cushion building, liquidity, shock absorption
 
     "ER-1": CheckInQuestion(
         "ER-1",
-        "Do you currently have at least one month of living expenses saved as an emergency fund?",
+        "Did you add any money to an emergency fund or savings account this week?",
         "emergency_readiness", "yes_no_scale", 5,
-        low_label="No",    # No  = low readiness → raw=1 → 0.0
-        high_label="Yes",  # Yes = good → raw=5 → 1.0
+        low_label="No",
+        high_label="Yes",
     ),
     "ER-2": CheckInQuestion(
         "ER-2",
-        "If you lost your primary income today, how long could you cover your essential expenses?",
-        "emergency_readiness", "1-5", 5,
-        low_label="Less than a week",
-        high_label="3 months or more",
+        "Could you cover a $500 unexpected expense today without borrowing?",
+        "emergency_readiness", "yes_no_scale", 5,
+        low_label="No",
+        high_label="Yes",
     ),
     "ER-3": CheckInQuestion(
         "ER-3",
-        "How prepared do you feel to handle a major unexpected expense right now?",
-        "emergency_readiness", "1-10", 10,
-        low_label="Completely unprepared",
-        high_label="Fully prepared",
+        "How many months of essential expenses do you currently have saved?",
+        "emergency_readiness", "1-5", 5,
+        low_label="Less than 1 week",
+        high_label="3+ months",
     ),
     "ER-4": CheckInQuestion(
         "ER-4",
-        "Has an unexpected expense significantly disrupted your finances in the last 30 days?",
+        "Did an unexpected expense significantly disrupt your budget this month?",
         "emergency_readiness", "yes_no_scale", 5,
-        low_label="Yes — it set me back",  # Yes = negative → raw=1 → 0.0
-        high_label="No — I absorbed it",   # No  = resilient → raw=5 → 1.0
+        low_label="Yes — it set me back",
+        high_label="No — absorbed it fine",
+        # INVERTED: Yes = low resilience
     ),
 
     # ── FINANCIAL AGENCY (10%) ───────────────────────────────────────────────
-    # Goal: measure sense of control, empowerment, and intentional action
+    # Behavioral signals: engagement, automation, proactive management
 
     "FA-1": CheckInQuestion(
         "FA-1",
-        "Do you believe you can meaningfully improve your financial situation in the next 6 months?",
-        "financial_agency", "1-5", 5,
-        low_label="No — completely stuck",
-        high_label="Absolutely — already making moves",
+        "Did you review your budget, spending, or financial plan this week?",
+        "financial_agency", "yes_no_scale", 5,
+        low_label="No",
+        high_label="Yes",
     ),
     "FA-2": CheckInQuestion(
         "FA-2",
-        "When you think about your finances, do you feel empowered or stuck?",
-        "financial_agency", "1-10", 10,
-        low_label="Completely stuck",
-        high_label="Fully empowered",
+        "Did you take a specific action to improve your financial situation this week?",
+        "financial_agency", "yes_no_scale", 5,
+        low_label="No",
+        high_label="Yes",
     ),
     "FA-3": CheckInQuestion(
         "FA-3",
-        "Compared to where you were financially 6 months ago, do you feel ahead or behind?",
-        "financial_agency", "1-5", 5,
-        low_label="Significantly behind",
-        high_label="Significantly ahead",
+        "Did you research a financial product, investment, or money strategy this week?",
+        "financial_agency", "yes_no_scale", 5,
+        low_label="No",
+        high_label="Yes",
     ),
     "FA-4": CheckInQuestion(
         "FA-4",
-        "Have you taken at least one specific action in the last 7 days to improve your financial situation?",
+        "Did you automate any bill payment, savings transfer, or investment contribution this month?",
         "financial_agency", "yes_no_scale", 5,
-        low_label="No",    # No = low agency → raw=1 → 0.0
-        high_label="Yes",  # Yes = active → raw=5 → 1.0
+        low_label="No",
+        high_label="Yes",
     ),
 }
 
 
 # ── INVERTED QUESTIONS ───────────────────────────────────────────────────────
-# These questions are phrased so high raw value = WORSE outcome.
+# These questions are phrased so answering "Yes" = NEGATIVE financial signal.
 # checkin_service flips normalization: score = 1 - ((raw-1)/(scale_max-1))
+
 INVERTED_QUESTION_IDS = {
-    "CS-2",  # high stress score = bad
-    "CS-3",  # high stress = bad
+    "CS-2",  # unexpected expenses = bad
+    "CS-5",  # overdraft = bad
+    "PP-1",  # skipping purchases = pressure
+    "PP-2",  # downgrading = pressure
+    "PP-4",  # delaying purchases = pressure
+    "ER-4",  # disrupted budget = bad
 }
 
 
 # ══════════════════════════════════════════
 #  WEEKLY BEHAVIORAL CROSSOVER (BSI)
-#  Runs on Sundays. Feeds BSI score only — not FCS dimensions.
+#  Runs on Sundays. Feeds BSI score only — not FCS.
 # ══════════════════════════════════════════
 
 WEEKLY_QUESTIONS: Dict[str, CheckInQuestion] = {
     "BX-1": CheckInQuestion(
         "BX-1",
-        "This week, did you skip or downgrade something you normally buy to save money?",
+        "Did you skip or downgrade a regular purchase this week to save money?",
         "category_downgrading", "yes_no_scale", 5,
         low_label="Yes", high_label="No", is_weekly=True,
     ),
@@ -347,9 +352,8 @@ def get_daily_questions(
     user_id, target_date: date = None, count: int = 5
 ) -> List[CheckInQuestion]:
     """
-    Returns `count` questions — one per dimension by default (count=5).
-    Deterministically seeded by user_id + date so the same user
-    sees the same questions on the same day across sessions.
+    Returns `count` questions — one per dimension by default.
+    Deterministically seeded by user_id + date for consistency.
     """
     if target_date is None:
         target_date = date.today()

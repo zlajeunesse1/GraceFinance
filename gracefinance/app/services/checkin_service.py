@@ -1,43 +1,53 @@
 """
-CheckIn Service — v3.0 (Institutional-Grade FCS Engine)
-════════════════════════════════════════════════════════
-CHANGES FROM v2.0:
+CheckIn Service — v4.0 (Institutional-Grade Behavioral Engine)
+══════════════════════════════════════════════════════════════════
+ARCHITECTURE CHANGES FROM v3.0:
 
-  NORMALIZATION FIX (critical):
-    Old: normalized = raw / scale_max
-         → raw=1 on 1-10 scale = 0.10  (WRONG — should be floor)
-    New: normalized = (raw - 1) / (scale_max - 1)
-         → raw=1 = 0.0, raw=max = 1.0  (correct true floor/ceiling)
+  MULTI-WINDOW BLENDING:
+    v3: 7-day window only
+    v4: 30/60/90-day blended windows
+        30d × 0.20 (recent signal)
+        60d × 0.35 (trend signal)
+        90d × 0.45 (baseline signal)
+    Long-term behavior dominates. One bad week cannot crater the score.
 
-  EMA SMOOTHING (institutional-grade):
-    FCS now uses Exponential Moving Average (α=0.20).
-    One bad day cannot crater the score.
-    Score reflects behavioral trend, not daily noise.
-    raw_fcs stored alongside smoothed_fcs for full transparency.
+  SLOWER EMA:
+    v3: α = 0.20
+    v4: α = 0.15
+    Score reacts more slowly. Institutional-grade stability.
 
-  CONFIDENCE BAND:
-    If user has answered < 3 of 5 dimensions, score is flagged
-    as low-confidence and returned with a data_coverage % field.
-    No score is returned if coverage < 40% (2/5 dimensions).
+  MOVEMENT CAPS:
+    v3: No caps
+    v4: ±3 points max FCS movement per day
+        ±2 points max per pillar per day
+    Prevents single check-in from creating volatility.
 
-  BSI SHOCK DETECTION:
-    If new raw FCS moves > 20 pts from previous smoothed FCS,
-    a behavioral shift event is logged and BSI is intensified.
+  OUTLIER DAMPENING:
+    If a single normalized response deviates > 2σ from the user's
+    rolling mean for that dimension, it is pulled toward the mean.
+    Extreme single responses are dampened, not discarded.
 
-  INVERTED QUESTIONS:
-    CS-2 and CS-3 (stress scales) are inverted so high raw = worse.
+  MINIMUM DATA THRESHOLDS:
+    Score requires ≥ 3 of 5 pillars with data AND ≥ 5 check-ins
+    in the 30-day window. Below threshold: score is "provisional"
+    (still computed but flagged, confidence < 50%).
 
-  DIMENSION ALIGNMENT:
-    debt_pressure REMOVED.
-    emergency_readiness ADDED at 15% weight.
+  CONSISTENCY WEIGHTING:
+    Users who check in regularly get higher-confidence scores.
+    Sporadic users get lower confidence, which dampens their
+    contribution to the GFCI population index.
 
-REPLACES: app/services/checkin_service.py
+INTERFACE: Same as v3 — drop-in replacement.
+  save_responses(db, user_id, answers) → List[CheckInResponse]
+  compute_user_snapshot(db, user_id)   → UserMetricSnapshot
+  get_user_metric_history(db, user_id) → List[UserMetricSnapshot]
 """
 
 from datetime import datetime, timezone, timedelta, date
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
+import math
 
 from app.models.checkin import CheckInResponse, UserMetricSnapshot
 from app.models import User
@@ -50,35 +60,34 @@ from app.services.question_bank import (
 
 
 # ══════════════════════════════════════════
-#  EMA CONFIG
+#  INSTITUTIONAL CONFIG
 # ══════════════════════════════════════════
 
-EMA_ALPHA: float = 0.20
-"""
-Smoothing factor for Exponential Moving Average.
-Lower = slower to react (more stable, more institutional).
-Higher = faster to react (more volatile, more gamified).
+# EMA smoothing factor — lower = more stable
+EMA_ALPHA: float = 0.15
 
-α=0.20 means:
-  - Today's raw score contributes 20% to new FCS
-  - Previous smoothed FCS contributes 80%
-  - A single bad day cannot drop score more than ~16 points
-  - 5 consecutive bad days drops score ~67% of the raw gap
-"""
+# Multi-window blending weights (must sum to 1.0)
+WINDOW_WEIGHTS: Dict[int, float] = {
+    30: 0.20,   # recent behavioral signal
+    60: 0.35,   # trend signal
+    90: 0.45,   # baseline stability signal
+}
 
+# Movement caps — maximum score change per computation
+MAX_FCS_MOVEMENT: float = 3.0       # ±3 points max per day
+MAX_PILLAR_MOVEMENT: float = 0.02   # ±0.02 on 0-1 scale (= ±2 pts on 0-100)
+
+# Minimum data requirements
+MIN_CHECKINS_FOR_CONFIDENT: int = 5     # in 30-day window
+MIN_PILLARS_FOR_SCORE: int = 3          # of 5 pillars must have data
+CONFIDENT_THRESHOLD: float = 50.0       # fcs_confidence >= this = "confident"
+
+# Outlier dampening
+OUTLIER_SIGMA_THRESHOLD: float = 2.0    # responses beyond 2σ get dampened
+OUTLIER_DAMPEN_FACTOR: float = 0.5      # pull 50% toward mean
+
+# BSI shock detection
 BSI_SHOCK_THRESHOLD: float = 20.0
-"""
-If raw FCS swings more than this vs prior smoothed FCS,
-a behavioral shift event fires. FCS still smooths normally —
-shock is captured in BSI, not hidden from the data.
-"""
-
-MIN_DIMENSION_COVERAGE: float = 0.40
-"""
-Minimum answered weight (as fraction of total) required to
-return a valid FCS. Below this, return None + low_confidence flag.
-Example: if only current_stability (0.30) is answered → 30% < 40% → None.
-"""
 
 
 # ══════════════════════════════════════════
@@ -88,21 +97,13 @@ Example: if only current_stability (0.30) is answered → 30% < 40% → None.
 def normalize_answer(raw: int, scale_max: int, inverted: bool = False) -> float:
     """
     Maps raw answer (1..scale_max) → 0.0..1.0.
-
     Formula: (raw - 1) / (scale_max - 1)
-    This ensures:
-      raw=1   → 0.0  (true floor — worst possible)
-      raw=max → 1.0  (true ceiling — best possible)
-
-    For inverted questions (high raw = worse outcome):
-      result = 1.0 - normalized
+    Inverted questions: result = 1.0 - normalized
     """
     if scale_max <= 1:
         return 1.0
-
     raw_clamped = max(1, min(raw, scale_max))
     normalized = (raw_clamped - 1) / (scale_max - 1)
-
     return round(1.0 - normalized if inverted else normalized, 4)
 
 
@@ -111,10 +112,7 @@ def normalize_answer(raw: int, scale_max: int, inverted: bool = False) -> float:
 # ══════════════════════════════════════════
 
 def save_responses(db: Session, user_id, answers: list) -> List[CheckInResponse]:
-    """
-    Save a batch of check-in answers with correct normalization.
-    Inverted questions (CS-2, CS-3) are flipped automatically.
-    """
+    """Save check-in answers with correct normalization."""
     saved = []
     now = datetime.now(timezone.utc)
 
@@ -144,45 +142,182 @@ def save_responses(db: Session, user_id, answers: list) -> List[CheckInResponse]
     db.commit()
     for r in saved:
         db.refresh(r)
-
     return saved
 
 
 # ══════════════════════════════════════════
-#  SNAPSHOT COMPUTATION
+#  MULTI-WINDOW DATA GATHERING
+# ══════════════════════════════════════════
+
+def _gather_windowed_responses(
+    db: Session, user_id, now: datetime
+) -> Dict[int, List[CheckInResponse]]:
+    """
+    Gather check-in responses for each rolling window (30/60/90 days).
+    Returns dict keyed by window size in days.
+    """
+    windows = {}
+    for days in WINDOW_WEIGHTS.keys():
+        start = now - timedelta(days=days)
+        responses = (
+            db.query(CheckInResponse)
+            .filter(
+                and_(
+                    CheckInResponse.user_id == user_id,
+                    CheckInResponse.checkin_date >= start,
+                    CheckInResponse.dimension != "conversation_theme",
+                )
+            )
+            .all()
+        )
+        windows[days] = responses
+    return windows
+
+
+def _compute_dimension_averages(
+    responses: List[CheckInResponse],
+) -> Dict[str, Optional[float]]:
+    """Compute per-dimension averages from a set of responses."""
+    dim_scores: Dict[str, List[float]] = {dim: [] for dim in FCS_WEIGHTS}
+
+    for r in responses:
+        dim = r.dimension
+        if dim in dim_scores and r.normalized_value is not None:
+            dim_scores[dim].append(r.normalized_value)
+
+    averages: Dict[str, Optional[float]] = {}
+    for dim in FCS_WEIGHTS:
+        vals = dim_scores[dim]
+        averages[dim] = (sum(vals) / len(vals)) if vals else None
+    return averages
+
+
+# ══════════════════════════════════════════
+#  OUTLIER DAMPENING
+# ══════════════════════════════════════════
+
+def _dampen_outliers(
+    responses: List[CheckInResponse],
+) -> List[CheckInResponse]:
+    """
+    Identify responses that deviate > 2σ from the user's per-dimension
+    rolling mean and pull them toward the mean.
+
+    Does NOT modify the database — works on in-memory copies.
+    """
+    from copy import copy
+
+    # Group by dimension
+    dim_vals: Dict[str, List[float]] = {}
+    for r in responses:
+        if r.dimension not in dim_vals:
+            dim_vals[r.dimension] = []
+        if r.normalized_value is not None:
+            dim_vals[r.dimension].append(r.normalized_value)
+
+    # Compute mean and std per dimension
+    dim_stats: Dict[str, tuple] = {}
+    for dim, vals in dim_vals.items():
+        if len(vals) >= 3:  # need at least 3 data points for meaningful σ
+            mean = sum(vals) / len(vals)
+            variance = sum((v - mean) ** 2 for v in vals) / len(vals)
+            std = math.sqrt(variance) if variance > 0 else 0.0
+            dim_stats[dim] = (mean, std)
+
+    # Dampen outliers
+    dampened = []
+    for r in responses:
+        if r.dimension in dim_stats and r.normalized_value is not None:
+            mean, std = dim_stats[r.dimension]
+            if std > 0:
+                deviation = abs(r.normalized_value - mean)
+                if deviation > OUTLIER_SIGMA_THRESHOLD * std:
+                    # Pull toward mean
+                    r_copy = copy(r)
+                    r_copy.normalized_value = round(
+                        r.normalized_value + OUTLIER_DAMPEN_FACTOR * (mean - r.normalized_value),
+                        4,
+                    )
+                    dampened.append(r_copy)
+                    continue
+        dampened.append(r)
+
+    return dampened
+
+
+# ══════════════════════════════════════════
+#  MOVEMENT CAPPING
+# ══════════════════════════════════════════
+
+def _cap_pillar_movement(
+    new_val: Optional[float],
+    old_val: Optional[float],
+) -> Optional[float]:
+    """Cap per-pillar movement to ±MAX_PILLAR_MOVEMENT per computation."""
+    if new_val is None:
+        return new_val
+    if old_val is None:
+        return new_val
+
+    delta = new_val - old_val
+    if abs(delta) > MAX_PILLAR_MOVEMENT:
+        capped = old_val + (MAX_PILLAR_MOVEMENT if delta > 0 else -MAX_PILLAR_MOVEMENT)
+        return round(capped, 4)
+    return new_val
+
+
+def _cap_fcs_movement(
+    new_fcs: Optional[float],
+    old_fcs: Optional[float],
+) -> Optional[float]:
+    """Cap FCS composite movement to ±MAX_FCS_MOVEMENT per computation."""
+    if new_fcs is None:
+        return new_fcs
+    if old_fcs is None:
+        return new_fcs
+
+    delta = new_fcs - old_fcs
+    if abs(delta) > MAX_FCS_MOVEMENT:
+        capped = old_fcs + (MAX_FCS_MOVEMENT if delta > 0 else -MAX_FCS_MOVEMENT)
+        return round(capped, 2)
+    return new_fcs
+
+
+# ══════════════════════════════════════════
+#  SNAPSHOT COMPUTATION — INSTITUTIONAL ENGINE
 # ══════════════════════════════════════════
 
 def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
     """
-    Core FCS computation pipeline:
+    Institutional-grade FCS computation pipeline:
 
-    Step 1 — Aggregate recent responses into per-dimension averages
-    Step 2 — Apply confidence gate (skip if < MIN_DIMENSION_COVERAGE)
-    Step 3 — Compute raw FCS composite (0–100)
-    Step 4 — Apply EMA smoothing against previous snapshot
-    Step 5 — Detect BSI shock if swing > BSI_SHOCK_THRESHOLD
-    Step 6 — Compute BSI from weekly behavioral questions
-    Step 7 — Persist and return snapshot
+    Step 1 — Gather responses across 30/60/90-day windows
+    Step 2 — Dampen outliers per dimension
+    Step 3 — Compute per-dimension averages per window
+    Step 4 — Blend windows (30d×0.20 + 60d×0.35 + 90d×0.45)
+    Step 5 — Cap pillar movement vs previous snapshot
+    Step 6 — Compute raw FCS composite (0–100)
+    Step 7 — Apply EMA smoothing (α=0.15)
+    Step 8 — Cap FCS movement (±3 points max)
+    Step 9 — Compute confidence score
+    Step 10 — Compute BSI from weekly behavioral questions
+    Step 11 — Update streak
+    Step 12 — Persist and return snapshot
     """
     now = datetime.now(timezone.utc)
-    window_start = now - timedelta(days=7)
 
-    responses = (
-        db.query(CheckInResponse)
-        .filter(
-            and_(
-                CheckInResponse.user_id == user_id,
-                CheckInResponse.checkin_date >= window_start,
-                # Exclude conversation theme records
-                CheckInResponse.dimension != "conversation_theme",
-            )
-        )
-        .all()
-    )
-
+    # Update streak first
     _update_streak(db, user_id, now)
 
-    if not responses:
+    # Get previous snapshot for movement capping and EMA
+    previous_snapshot = _get_latest_snapshot(db, user_id)
+
+    # ── Step 1: Gather multi-window responses ─────────────────────────────
+    windowed = _gather_windowed_responses(db, user_id, now)
+
+    # Check if we have any data at all
+    all_responses = windowed.get(90, [])
+    if not all_responses:
         snapshot = UserMetricSnapshot(
             user_id=user_id,
             computed_at=now,
@@ -203,44 +338,67 @@ def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
         db.refresh(snapshot)
         return snapshot
 
-    # ── Step 1: Per-dimension averages ──────────────────────────────────────
-    dim_scores: Dict[str, List[float]] = {dim: [] for dim in FCS_WEIGHTS}
+    # ── Step 2: Dampen outliers ───────────────────────────────────────────
+    dampened_windows = {}
+    for days, responses in windowed.items():
+        dampened_windows[days] = _dampen_outliers(responses)
 
-    for r in responses:
-        dim = r.dimension
-        if dim in dim_scores and r.normalized_value is not None:
-            dim_scores[dim].append(r.normalized_value)
+    # ── Step 3: Per-dimension averages per window ─────────────────────────
+    window_averages: Dict[int, Dict[str, Optional[float]]] = {}
+    for days, responses in dampened_windows.items():
+        window_averages[days] = _compute_dimension_averages(responses)
 
-    dim_averages: Dict[str, Optional[float]] = {}
+    # ── Step 4: Blend windows ─────────────────────────────────────────────
+    blended: Dict[str, Optional[float]] = {}
     for dim in FCS_WEIGHTS:
-        vals = dim_scores[dim]
-        dim_averages[dim] = (sum(vals) / len(vals)) if vals else None
+        weighted_sum = 0.0
+        total_weight = 0.0
 
-    # ── Step 2: Confidence gate ──────────────────────────────────────────────
+        for days, weight in WINDOW_WEIGHTS.items():
+            val = window_averages[days].get(dim)
+            if val is not None:
+                weighted_sum += val * weight
+                total_weight += weight
+
+        if total_weight > 0:
+            blended[dim] = round(weighted_sum / total_weight, 4)
+        else:
+            blended[dim] = None
+
+    # ── Step 5: Cap pillar movement ───────────────────────────────────────
+    if previous_snapshot:
+        prev_dims = {
+            "current_stability": previous_snapshot.current_stability,
+            "future_outlook": previous_snapshot.future_outlook,
+            "purchasing_power": previous_snapshot.purchasing_power,
+            "emergency_readiness": previous_snapshot.emergency_readiness,
+            "financial_agency": previous_snapshot.financial_agency,
+        }
+        for dim in FCS_WEIGHTS:
+            blended[dim] = _cap_pillar_movement(blended[dim], prev_dims.get(dim))
+
+    # ── Step 6: Raw FCS composite (0–100) ─────────────────────────────────
     answered_weight = sum(
-        weight for dim, weight in FCS_WEIGHTS.items()
-        if dim_averages.get(dim) is not None
+        w for dim, w in FCS_WEIGHTS.items() if blended.get(dim) is not None
     )
-    data_coverage = round(answered_weight, 4)  # 0.0–1.0
+    pillars_with_data = sum(
+        1 for dim in FCS_WEIGHTS if blended.get(dim) is not None
+    )
 
-    # ── Step 3: Raw FCS composite (0–100) ────────────────────────────────────
     fcs_raw: Optional[float] = None
-
-    if data_coverage >= MIN_DIMENSION_COVERAGE:
+    if pillars_with_data >= MIN_PILLARS_FOR_SCORE and answered_weight > 0:
         weighted_sum = sum(
-            dim_averages[dim] * weight
+            blended[dim] * weight
             for dim, weight in FCS_WEIGHTS.items()
-            if dim_averages.get(dim) is not None
+            if blended.get(dim) is not None
         )
-        # Normalize to answered weight so partial data doesn't deflate score
         fcs_raw = round((weighted_sum / answered_weight) * 100, 2)
 
-    # ── Step 4: EMA smoothing ─────────────────────────────────────────────────
+    # ── Step 7: EMA smoothing ─────────────────────────────────────────────
     fcs_composite: Optional[float] = None
     bsi_shock = False
 
     if fcs_raw is not None:
-        previous_snapshot = _get_latest_snapshot(db, user_id)
         prev_fcs = (
             previous_snapshot.fcs_composite
             if previous_snapshot and previous_snapshot.fcs_composite is not None
@@ -248,7 +406,7 @@ def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
         )
 
         if prev_fcs is not None:
-            # ── Step 5: BSI shock detection ───────────────────────────────────
+            # BSI shock detection before smoothing
             swing = abs(fcs_raw - prev_fcs)
             if swing >= BSI_SHOCK_THRESHOLD:
                 bsi_shock = True
@@ -258,33 +416,42 @@ def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
                 (EMA_ALPHA * fcs_raw) + ((1 - EMA_ALPHA) * prev_fcs), 2
             )
         else:
-            # First ever score — no previous to smooth against
             fcs_composite = fcs_raw
 
-    # ── Step 6: BSI from weekly behavioral questions ─────────────────────────
-    bsi_score = _compute_bsi(db, user_id, window_start, now)
+    # ── Step 8: Cap FCS movement ──────────────────────────────────────────
+    if previous_snapshot and previous_snapshot.fcs_composite is not None:
+        fcs_composite = _cap_fcs_movement(fcs_composite, previous_snapshot.fcs_composite)
 
-    # Amplify BSI if shock detected
+    # ── Step 9: Confidence score ──────────────────────────────────────────
+    checkin_count_30d = len(windowed.get(30, []))
+    participation_ratio = min(checkin_count_30d / max(MIN_CHECKINS_FOR_CONFIDENT, 1), 1.0)
+    pillar_coverage = pillars_with_data / 5.0
+    fcs_confidence = round(participation_ratio * pillar_coverage * 100, 1)
+
+    # ── Step 10: BSI from weekly questions ────────────────────────────────
+    bsi_start = now - timedelta(days=7)
+    bsi_score = _compute_bsi(db, user_id, bsi_start, now)
+
     if bsi_shock and bsi_score is not None:
         bsi_score = round(bsi_score * 1.25, 2)
     elif bsi_shock:
-        bsi_score = -25.0  # default negative signal when no BSI data
+        bsi_score = -25.0
 
-    # ── Step 7: Persist ───────────────────────────────────────────────────────
+    # ── Step 12: Persist ──────────────────────────────────────────────────
     snapshot = UserMetricSnapshot(
         user_id=user_id,
         computed_at=now,
-        current_stability=dim_averages.get("current_stability"),
-        future_outlook=dim_averages.get("future_outlook"),
-        purchasing_power=dim_averages.get("purchasing_power"),
-        emergency_readiness=dim_averages.get("emergency_readiness"),
-        financial_agency=dim_averages.get("financial_agency"),
+        current_stability=blended.get("current_stability"),
+        future_outlook=blended.get("future_outlook"),
+        purchasing_power=blended.get("purchasing_power"),
+        emergency_readiness=blended.get("emergency_readiness"),
+        financial_agency=blended.get("financial_agency"),
         fcs_raw=fcs_raw,
         fcs_composite=fcs_composite,
-        fcs_confidence=round(data_coverage * 100, 1),  # store as 0–100%
+        fcs_confidence=fcs_confidence,
         bsi_score=bsi_score,
         bsi_shock=bsi_shock,
-        checkin_count=len(responses),
+        checkin_count=len(all_responses),
     )
 
     db.add(snapshot)
@@ -302,13 +469,7 @@ def _compute_bsi(
 ) -> Optional[float]:
     """
     Behavioral Shift Indicator from weekly BX- questions.
-
-    Scale: -100 (maximum contraction / stress) to +100 (maximum expansion).
-    Midpoint (0) = neutral, no behavioral shift.
-
-    Logic:
-      - Each BX question normalized 0.0–1.0 (high = stable/positive)
-      - Average → center around 0.5 → scale to -100..+100
+    Scale: -100 (contraction) to +100 (expansion). 0 = neutral.
     """
     weekly_responses = (
         db.query(CheckInResponse)
@@ -327,7 +488,7 @@ def _compute_bsi(
         return None
 
     avg = sum(r.normalized_value for r in weekly_responses) / len(weekly_responses)
-    bsi = (avg - 0.5) * 200  # maps 0→-100, 0.5→0, 1.0→+100
+    bsi = (avg - 0.5) * 200
     return round(bsi, 2)
 
 
@@ -348,13 +509,13 @@ def _update_streak(db: Session, user_id, now: datetime) -> None:
     if last_checkin is not None:
         last_date = last_checkin.date() if hasattr(last_checkin, "date") else last_checkin
         if last_date == today:
-            return  # Already checked in today
+            return
         elif last_date == today - timedelta(days=1):
             user.current_streak = current_streak + 1
         else:
-            user.current_streak = 1  # Streak broken
+            user.current_streak = 1
     else:
-        user.current_streak = 1  # First ever check-in
+        user.current_streak = 1
 
     user.last_checkin_date = now
     db.commit()
