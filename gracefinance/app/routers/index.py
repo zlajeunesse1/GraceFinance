@@ -1,26 +1,28 @@
 """
-Index Router — GraceFinance Real World Index (GF-RWI) endpoints.
-
+Index Router — Grace Financial Confidence Index (GFCI)
+═══════════════════════════════════════════════════════
 Endpoints:
-  GET  /index/latest            → Current GF-RWI composite + sub-indices
-  GET  /index/history           → GF-RWI over time for trending
-  POST /index/compute           → Manually trigger index computation (admin/dev)
-  GET  /index/methodology       → Public methodology documentation
+  GET  /index/latest       → Current GFCI composite + pillar breakdown
+  GET  /index/history      → GFCI over time for trending
+  POST /index/compute      → Manually trigger index computation (dev/admin)
+  GET  /index/methodology  → Public methodology documentation
+
+Wired to: app/services/gfci_engine.py (v4 institutional engine)
 """
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services.index_engine_service import (
-    compute_daily_index,
-    get_latest_index,
-    get_index_history,
+from app.services.gfci_engine import (
+    compute_daily_gfci,
+    get_gfci_history,
 )
-from app.schemas.checkin_schemas import IndexOut, IndexHistory
+from app.models.checkin import DailyIndex
+from sqlalchemy import desc
 
 
-router = APIRouter(prefix="/index", tags=["GF-RWI Index"])
+router = APIRouter(prefix="/index", tags=["GFCI Index"])
 
 
 @router.get("/latest")
@@ -28,30 +30,32 @@ def latest_index(
     segment: str = "national",
     db: Session = Depends(get_db),
 ):
-    """Get the most recent GF-RWI composite and all sub-indices."""
-    index = get_latest_index(db, segment)
+    """Get the most recent GFCI composite and trend data."""
+    index = (
+        db.query(DailyIndex)
+        .filter(DailyIndex.segment == segment)
+        .order_by(desc(DailyIndex.computed_at))
+        .first()
+    )
 
     if not index:
         return {
-            "message": "No index data yet. Complete some check-ins first!",
-            "gf_rwi_composite": None,
+            "published": False,
+            "message": "No index data yet. Need check-ins from users first.",
+            "gfci_composite": None,
         }
 
     return {
+        "published": True,
         "index_date": index.index_date.isoformat(),
         "segment": index.segment,
-        "gf_rwi_composite": index.gf_rwi_composite,
-        "fcs": {
-            "composite": index.fcs_value,
-            "current_stability": index.fcs_current_stability,
-            "future_outlook": index.fcs_future_outlook,
-            "purchasing_power": index.fcs_purchasing_power,
-            "debt_pressure": index.fcs_debt_pressure,
-            "financial_agency": index.fcs_financial_agency,
-        },
-        "bsi": index.bsi_value,
-        "spi": index.spi_value,
+        "gfci_composite": index.gf_rwi_composite,
+        "fcs_average": index.fcs_value,
         "user_count": index.user_count,
+        "trend_direction": index.trend_direction,
+        "gci_slope_3d": index.gci_slope_3d,
+        "gci_slope_7d": index.gci_slope_7d,
+        "gci_volatility_7d": index.gci_volatility_7d,
     }
 
 
@@ -61,8 +65,8 @@ def index_history(
     days: int = 30,
     db: Session = Depends(get_db),
 ):
-    """Get GF-RWI history for the frontend trend chart."""
-    data = get_index_history(db, segment, days)
+    """Get GFCI history for the frontend trend chart."""
+    data = get_gfci_history(db, segment, days)
 
     return {
         "segment": segment,
@@ -70,11 +74,10 @@ def index_history(
         "data_points": [
             {
                 "date": d.index_date.isoformat(),
-                "gf_rwi": d.gf_rwi_composite,
+                "gfci": d.gf_rwi_composite,
                 "fcs": d.fcs_value,
-                "bsi": d.bsi_value,
-                "spi": d.spi_value,
                 "users": d.user_count,
+                "trend": d.trend_direction,
             }
             for d in data
         ],
@@ -87,64 +90,87 @@ def trigger_compute(
     db: Session = Depends(get_db),
 ):
     """
-    Manually trigger GF-RWI computation.
+    Manually trigger GFCI computation.
     In production, this runs on a nightly scheduler.
-    For dev, hit this endpoint to compute on demand.
+    For dev/testing, hit this endpoint to compute on demand.
     """
-    index = compute_daily_index(db, segment)
+    index = compute_daily_gfci(db, segment)
+
+    if not index:
+        return {
+            "message": "Could not compute index — no eligible user data.",
+            "gfci_composite": None,
+        }
 
     return {
-        "message": "GF-RWI computed and saved",
-        "gf_rwi_composite": index.gf_rwi_composite,
-        "fcs": index.fcs_value,
-        "bsi": index.bsi_value,
+        "message": "GFCI computed and saved",
+        "gfci_composite": index.gf_rwi_composite,
+        "fcs_average": index.fcs_value,
         "user_count": index.user_count,
+        "trend_direction": index.trend_direction,
         "snapshot_id": str(index.id),
     }
 
 
 @router.get("/methodology")
 def methodology():
-    """Public methodology documentation for the GF-RWI."""
+    """Public methodology documentation for the GFCI."""
     return {
-        "name": "GraceFinance Real World Index (GF-RWI)",
-        "version": "1.0",
+        "name": "Grace Financial Confidence Index (GFCI)",
+        "version": "4.0",
         "description": (
-            "A composite economic indicator measuring real-time financial health "
-            "and purchasing experience of working Americans, built from daily "
-            "behavioral check-ins rather than lagging government surveys."
+            "A composite behavioral confidence indicator measuring real-time "
+            "financial health across the GraceFinance user population. Built from "
+            "daily behavioral check-ins measuring observable financial actions, "
+            "not sentiment surveys."
         ),
-        "sub_indices": {
-            "FCS": {
-                "name": "Financial Confidence Score",
-                "weight": 0.60,
-                "range": "0–100",
-                "dimensions": {
-                    "current_stability": {"weight": 0.30, "questions": 5},
-                    "future_outlook": {"weight": 0.25, "questions": 4},
-                    "purchasing_power": {"weight": 0.20, "questions": 4},
-                    "debt_pressure": {"weight": 0.15, "questions": 3},
-                    "financial_agency": {"weight": 0.10, "questions": 3},
-                },
+        "scoring_engine": {
+            "individual_score": "Financial Confidence Score (FCS)",
+            "range": "0–100",
+            "smoothing": "EMA α=0.15",
+            "windows": {
+                "30d": {"weight": 0.20, "role": "Recent behavioral signal"},
+                "60d": {"weight": 0.35, "role": "Trend signal"},
+                "90d": {"weight": 0.45, "role": "Baseline stability signal"},
             },
-            "BSI": {
-                "name": "Behavioral Shift Indicator",
-                "weight": 0.40,
-                "range": "-100 to +100",
-                "frequency": "Weekly (Sundays)",
-                "patterns_tracked": [
-                    "category_downgrading",
-                    "credit_substitution",
-                    "subscription_churn",
-                    "delayed_purchasing",
-                    "cash_hoarding",
-                ],
+            "movement_caps": {
+                "fcs_per_day": "±3 points",
+                "pillar_per_day": "±2 points",
             },
-            "SPI": {
-                "name": "Spending Pressure Index",
-                "status": "Phase 2 — requires transaction data integration",
+            "pillars": {
+                "current_stability": {"weight": 0.30, "signals": "Payment compliance, income predictability"},
+                "future_outlook": {"weight": 0.25, "signals": "Saving actions, goal progress, debt trajectory"},
+                "purchasing_power": {"weight": 0.20, "signals": "Consumption shifts, spending capacity"},
+                "emergency_readiness": {"weight": 0.15, "signals": "Cushion building, liquidity, shock absorption"},
+                "financial_agency": {"weight": 0.10, "signals": "Engagement, automation, proactive management"},
             },
         },
-        "normalization": "Fixed logical bounds (MVP). Rolling 90-day planned for scale.",
+        "population_index": {
+            "name": "GFCI",
+            "aggregation": "Participation-weighted mean of individual FCS scores",
+            "smoothing": "EMA α=0.10",
+            "movement_cap": "±5 points per day",
+            "minimum_users": 10,
+            "stale_cutoff": "14 days",
+        },
+        "behavioral_shift_indicator": {
+            "name": "BSI",
+            "range": "-100 to +100",
+            "frequency": "Weekly (Sundays)",
+            "patterns_tracked": [
+                "category_downgrading",
+                "credit_substitution",
+                "subscription_churn",
+                "delayed_purchasing",
+                "cash_hoarding",
+            ],
+        },
+        "data_integrity": [
+            "Outlier dampening (2σ threshold)",
+            "Multi-window blending prevents single-day distortion",
+            "Movement caps prevent artificial volatility",
+            "Minimum participation thresholds for confident scores",
+            "Consistency weighting rewards regular engagement",
+        ],
         "computation_schedule": "Daily at 00:05 UTC",
     }
