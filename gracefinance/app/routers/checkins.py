@@ -5,6 +5,7 @@ Endpoints:
   GET  /checkin/questions       → Get today's questions (empty if already checked in today)
   POST /checkin/submit          → Submit answers — enforces ONE check-in per user per day
   GET  /checkin/metrics         → User's FCS metric snapshots over time
+  POST /checkin/reset           → Dev tool — clear today's check-in to re-test
 
 Data quality rule:
   One check-in per user per calendar day (UTC). Enforced at the server level on
@@ -201,6 +202,41 @@ def submit_checkin(
         "fcs_snapshot": float(snapshot.fcs_composite or 0),
         "metrics": metrics_snapshot,
         "reward": reward,
+    }
+
+
+# ──────────────────────────────────────────
+#  DEV: RESET TODAY'S CHECK-IN
+# ──────────────────────────────────────────
+
+@router.post("/reset")
+def reset_today_checkin(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Dev tool — delete the current user's check-in responses from today (UTC).
+    Allows re-testing the check-in flow without waiting for the next day.
+    Only deletes the authenticated user's data — no other users affected.
+    """
+    today_utc = date.today()
+
+    deleted = (
+        db.query(CheckInResponse)
+        .filter(
+            and_(
+                CheckInResponse.user_id == user.id,
+                func.date(CheckInResponse.checkin_date) == today_utc,
+            )
+        )
+        .delete(synchronize_session="fetch")
+    )
+
+    db.commit()
+
+    return {
+        "message": f"Deleted {deleted} responses from today. Check-in unlocked.",
+        "date": str(today_utc),
     }
 
 
