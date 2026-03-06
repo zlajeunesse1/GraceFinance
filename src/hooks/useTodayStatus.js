@@ -14,7 +14,9 @@
 
 import { useState, useEffect, useCallback } from "react"
 
-var API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000')
+var API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : 'https://gracefinance-production.up.railway.app'
 
 export default function useTodayStatus() {
   var statusState = useState(null)
@@ -31,7 +33,7 @@ export default function useTodayStatus() {
     var headers = { "Content-Type": "application/json" }
     if (token) headers["Authorization"] = "Bearer " + token
 
-    fetch(API_BASE + "/api/v1/me/today", { headers: headers })
+    fetch(API_BASE + "/me/today", { headers: headers })
       .then(function (res) {
         if (!res.ok) throw new Error("Failed to fetch today status")
         return res.json()

@@ -72,7 +72,7 @@ var dimensionLabels = {
   current_stability:     'Current Stability',
   future_outlook:        'Future Outlook',
   purchasing_power:      'Purchasing Power',
-  debt_pressure:         'Debt Pressure',
+  emergency_readiness:   'Emergency Readiness',
   financial_agency:      'Financial Agency',
   category_downgrading:  'Spending Shifts',
   credit_substitution:   'Credit Usage',

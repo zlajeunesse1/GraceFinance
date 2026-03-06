@@ -64,27 +64,27 @@ var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
 /* ── HELPERS ───────────────────────────────────────────────── */
 
 var dimensionLabels = {
-  current_stability:  "Stability",
-  future_outlook:     "Outlook",
-  purchasing_power:   "Purchasing Power",
-  emergency_readiness:"Emergency Readiness",
-  income_adequacy:    "Income Adequacy",
+  current_stability:   "Stability",
+  future_outlook:      "Outlook",
+  purchasing_power:    "Purchasing Power",
+  emergency_readiness: "Emergency Readiness",
+  financial_agency:    "Financial Agency",
 }
 
 var dimensionWeights = {
-  current_stability:  0.30,
-  future_outlook:     0.25,
-  purchasing_power:   0.20,
-  emergency_readiness:0.15,
-  income_adequacy:    0.10,
+  current_stability:   0.30,
+  future_outlook:      0.25,
+  purchasing_power:    0.20,
+  emergency_readiness: 0.15,
+  financial_agency:    0.10,
 }
 
 var dimensionTips = {
-  current_stability:  "Set up autopay for your biggest bills. Knowing they're covered reduces stress.",
-  future_outlook:     "Write down one financial goal for the next 90 days. Clarity drives confidence.",
-  purchasing_power:   "Track 3 grocery swaps this week. Small wins compound.",
-  emergency_readiness:"Auto-transfer even $10/week to a separate savings account.",
-  income_adequacy:    "Identify one skill that could increase your earning power in 6 months.",
+  current_stability:   "Set up autopay for your biggest bills. Knowing they're covered reduces stress.",
+  future_outlook:      "Write down one financial goal for the next 90 days. Clarity drives confidence.",
+  purchasing_power:    "Track 3 grocery swaps this week. Small wins compound.",
+  emergency_readiness: "Auto-transfer even $10/week to a separate savings account.",
+  financial_agency:    "Identify one skill that could increase your earning power in 6 months.",
 }
 
 function getScoreLabel(score) {
@@ -350,7 +350,7 @@ function QuickStats(props) {
 
 function DimensionBreakdown(props) {
   var metrics = props.metrics || {}
-  var dims = ["current_stability", "future_outlook", "purchasing_power", "emergency_readiness", "income_adequacy"]
+  var dims = ["current_stability", "future_outlook", "purchasing_power", "emergency_readiness", "financial_agency"]
 
   var weakest = null
   var weakestScore = 1.0
@@ -743,11 +743,11 @@ export default function DashboardPage() {
 
   var dims = s && s.dimensions ? s.dimensions : {}
   var currentMetrics = {
-    current_stability:  dims.stability != null         ? dims.stability / 100          : null,
-    future_outlook:     dims.outlook != null            ? dims.outlook / 100             : null,
-    purchasing_power:   dims.purchasing_power != null   ? dims.purchasing_power / 100    : null,
-    emergency_readiness:dims.emergency_readiness != null? dims.emergency_readiness / 100 : null,
-    income_adequacy:    dims.income_adequacy != null    ? dims.income_adequacy / 100     : null,
+    current_stability:   dims.stability != null          ? dims.stability / 100          : null,
+    future_outlook:      dims.outlook != null             ? dims.outlook / 100             : null,
+    purchasing_power:    dims.purchasing_power != null    ? dims.purchasing_power / 100    : null,
+    emergency_readiness: dims.emergency_readiness != null ? dims.emergency_readiness / 100 : null,
+    financial_agency:    dims.financial_agency != null    ? dims.financial_agency / 100    : null,
   }
 
   var weakestDim = null
