@@ -64,7 +64,7 @@ def _build_snapshot(
             stability=_dim(latest.current_stability),
             outlook=_dim(latest.future_outlook),
             purchasing_power=_dim(latest.purchasing_power),
-            debt_pressure=_dim(latest.debt_pressure),
+            emergency_readiness=_dim(latest.emergency_readiness),
             financial_agency=_dim(latest.financial_agency),
         ),
         streak_count=streak if streak > 0 else None,

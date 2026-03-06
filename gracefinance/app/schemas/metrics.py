@@ -6,7 +6,7 @@ class DimensionScores(BaseModel):
     stability: Optional[float] = None        # 0–100
     outlook: Optional[float] = None
     purchasing_power: Optional[float] = None
-    debt_pressure: Optional[float] = None
+    emergency_readiness: Optional[float] = None
     financial_agency: Optional[float] = None
 
 class UserMetricsSnapshot(BaseModel):

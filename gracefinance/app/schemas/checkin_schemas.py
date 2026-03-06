@@ -70,7 +70,7 @@ class UserMetricOut(BaseModel):
     current_stability: Optional[float] = None
     future_outlook: Optional[float] = None
     purchasing_power: Optional[float] = None
-    debt_pressure: Optional[float] = None
+    emergency_readiness: Optional[float] = None
     financial_agency: Optional[float] = None
     fcs_composite: Optional[float] = None
     bsi_score: Optional[float] = None
@@ -98,7 +98,7 @@ class IndexOut(BaseModel):
     fcs_current_stability: float
     fcs_future_outlook: float
     fcs_purchasing_power: float
-    fcs_debt_pressure: float
+    fcs_emergency_readiness: float
     fcs_financial_agency: float
     bsi_value: Optional[float] = None
     spi_value: Optional[float] = None
