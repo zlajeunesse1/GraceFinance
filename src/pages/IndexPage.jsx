@@ -2,9 +2,10 @@
  * IndexPage — GFCI Institutional Dashboard
  *
  * Wired to:
- *   GET /index/latest   → Current GFCI composite + trend
- *   GET /index/history  → 30-day trend data for chart
- *   GET /index/methodology → Public methodology
+ *   GET  /index/latest       → Current GFCI composite + trend
+ *   GET  /index/history      → 30-day trend data for chart
+ *   POST /index/compute      → Trigger GFCI computation
+ *   GET  /index/methodology  → Public methodology
  *
  * Design: Bloomberg-inspired. Data-dense, monochrome.
  */
@@ -27,11 +28,22 @@ var API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:8000'
   : 'https://gracefinance-production.up.railway.app'
 
-function apiFetch(endpoint) {
+function apiFetch(endpoint, options) {
   var token = localStorage.getItem("grace_token")
   var headers = { "Content-Type": "application/json" }
   if (token) headers["Authorization"] = "Bearer " + token
-  return fetch(API_BASE + endpoint, { headers: headers }).then(function (res) {
+  var config = { headers: headers }
+  if (options) {
+    for (var k in options) {
+      if (k === "headers") {
+        for (var h in options.headers) headers[h] = options.headers[h]
+      } else {
+        config[k] = options[k]
+      }
+    }
+  }
+  config.headers = headers
+  return fetch(API_BASE + endpoint, config).then(function (res) {
     if (!res.ok) throw new Error("Failed: " + endpoint)
     return res.json()
   })
@@ -121,6 +133,9 @@ export default function IndexPage() {
   var showMethodState = useState(false)
   var showMethod = showMethodState[0]; var setShowMethod = showMethodState[1]
 
+  var computingState = useState(false)
+  var computing = computingState[0]; var setComputing = computingState[1]
+
   useEffect(function () {
     setMounted(true)
     loadData()
@@ -150,9 +165,13 @@ export default function IndexPage() {
   }
 
   function handleCompute() {
-    apiFetch("/index/compute").then(function () {
+    setComputing(true)
+    apiFetch("/index/compute", { method: "POST" }).then(function () {
       loadData()
-    }).catch(function () {})
+      setComputing(false)
+    }).catch(function () {
+      setComputing(false)
+    })
   }
 
   /* Derived state */
@@ -383,17 +402,19 @@ export default function IndexPage() {
             </div>
             <button
               onClick={handleCompute}
+              disabled={computing}
               style={{
                 padding: "10px 20px", fontSize: 13, fontWeight: 600,
-                fontFamily: FONT, cursor: "pointer",
+                fontFamily: FONT, cursor: computing ? "wait" : "pointer",
                 background: C.text, color: C.bg,
                 border: "none", borderRadius: 8,
                 transition: "opacity 0.2s",
+                opacity: computing ? 0.5 : 1,
               }}
-              onMouseEnter={function (e) { e.target.style.opacity = "0.85" }}
-              onMouseLeave={function (e) { e.target.style.opacity = "1" }}
+              onMouseEnter={function (e) { if (!computing) e.target.style.opacity = "0.85" }}
+              onMouseLeave={function (e) { if (!computing) e.target.style.opacity = "1" }}
             >
-              Compute Now
+              {computing ? "Computing..." : "Compute Now"}
             </button>
           </div>
         </Card>
