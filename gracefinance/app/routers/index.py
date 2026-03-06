@@ -5,6 +5,7 @@ Endpoints:
   GET  /index/latest       → Current GFCI composite + pillar breakdown
   GET  /index/history      → GFCI over time for trending
   POST /index/compute      → Manually trigger index computation (dev/admin)
+  POST /index/reset        → Wipe index data and start fresh (dev only)
   GET  /index/methodology  → Public methodology documentation
 
 Wired to: app/services/gfci_engine.py (v4 institutional engine)
@@ -110,6 +111,17 @@ def trigger_compute(
         "trend_direction": index.trend_direction,
         "snapshot_id": str(index.id),
     }
+
+
+@router.post("/reset")
+def reset_index(
+    db: Session = Depends(get_db),
+):
+    """Dev tool — wipe all daily_index rows and start fresh."""
+    count = db.query(DailyIndex).count()
+    db.query(DailyIndex).delete()
+    db.commit()
+    return {"message": f"Deleted {count} index rows. Ready for fresh compute."}
 
 
 @router.get("/methodology")
