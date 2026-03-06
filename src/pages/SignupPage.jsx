@@ -78,7 +78,7 @@ export default function SignupPage() {
         <div style={{ width: '100%', maxWidth: 380 }}>
           <div style={{ marginBottom: 40 }}>
             <h2 style={{ fontSize: 24, fontWeight: 600, color: '#ffffff', margin: '0 0 8px', letterSpacing: '-0.02em' }}>Create your account</h2>
-            <p style={{ fontSize: 14, color: '#555555', margin: 0 }}>Start building your Financial Confidence Score.</p>
+            <p style={{ fontSize: 14, color: '#555555', margin: 0 }}>Know your Financial Confidence Score in 6 taps. <span style={{ color: '#444444' }}>Terms apply.</span></p>
           </div>
           {apiError && (<div style={{ marginBottom: 24, padding: '12px 16px', border: '1px solid #331111', background: '#1a0a0a', borderRadius: 8, fontSize: 13, color: '#ff4444' }}>{apiError}</div>)}
           <form onSubmit={handleSubmit}>
