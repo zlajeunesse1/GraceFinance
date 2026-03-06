@@ -1,9 +1,10 @@
 /**
- * DailyCheckin — v5 Polish
- * Warm completion messages. Clean data collection. FCS-forward.
+ * DailyCheckin — v5 Responsive
+ * Touch-friendly buttons. Smaller scale buttons on mobile.
  */
 
 import { useState, useEffect } from 'react'
+import useResponsive from '../hooks/useResponsive'
 
 var API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:8000'
@@ -21,15 +22,15 @@ var dimensionLabels = {
   deferred_spending: 'Spending Timing', debt_accumulation: 'Debt Patterns', financial_avoidance: 'Engagement',
 }
 
-function formatDimension(dim) {
-  if (!dim) return ''; if (dimensionLabels[dim]) return dimensionLabels[dim]
-  return dim.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase() })
-}
+function formatDimension(dim) { if (!dim) return ''; if (dimensionLabels[dim]) return dimensionLabels[dim]; return dim.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase() }) }
 function getScaleLabels(q) { return { low: q.low_label || 'Low', high: q.high_label || 'High' } }
 function getQuestionType(q) { if (!q) return 'scale_5'; if (q.scale_type === 'yes_no_scale') return 'yes_no'; if (q.scale_type === '1-10') return 'slider'; return 'scale_5' }
 
 export default function DailyCheckin(props) {
   var onCheckinComplete = props.onCheckinComplete || null
+  var screen = useResponsive()
+  var m = screen.isMobile
+
   var questionsState = useState([]); var questions = questionsState[0]; var setQuestions = questionsState[1]
   var answersState = useState({}); var answers = answersState[0]; var setAnswers = answersState[1]
   var loadingState = useState(true); var loading = loadingState[0]; var setLoading = loadingState[1]
@@ -74,9 +75,10 @@ export default function DailyCheckin(props) {
   function isAnswered(q) { var a = answers[q.question_id]; if (a === undefined || a === null) return false; if (typeof a === 'string') return a.trim().length > 0; return true }
 
   var cardStyle = { background: C.card, border: '1px solid ' + C.border, borderRadius: 12, fontFamily: FONT }
+  var px = m ? 20 : 28
 
   if (loading) {
-    return (<div style={Object.assign({}, cardStyle, { padding: 32 })}>
+    return (<div style={Object.assign({}, cardStyle, { padding: px })}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ width: 16, height: 16, border: '2px solid ' + C.faint, borderTopColor: C.text, borderRadius: '50%', animation: 'checkinSpin 0.8s linear infinite' }} />
         <span style={{ fontSize: 13, color: C.muted }}>Preparing your check-in...</span>
@@ -86,29 +88,29 @@ export default function DailyCheckin(props) {
   }
 
   if (error) {
-    return (<div style={Object.assign({}, cardStyle, { padding: 32, borderColor: C.error + '40' })}>
+    return (<div style={Object.assign({}, cardStyle, { padding: px, borderColor: C.error + '40' })}>
       <p style={{ fontSize: 13, color: C.error, margin: '0 0 12px' }}>Something went wrong: {error}</p>
-      <button onClick={function () { setError(null); fetchQuestions() }} style={{ fontSize: 13, padding: '8px 16px', borderRadius: 6, border: '1px solid ' + C.error + '40', background: 'transparent', color: C.error, cursor: 'pointer', fontFamily: FONT }}>Try again</button>
+      <button onClick={function () { setError(null); fetchQuestions() }} style={{ fontSize: 13, padding: '10px 16px', borderRadius: 6, border: '1px solid ' + C.error + '40', background: 'transparent', color: C.error, cursor: 'pointer', fontFamily: FONT }}>Try again</button>
     </div>)
   }
 
   if (submitted) {
     var fcsScore = result && result.metrics && result.metrics.fcs_total != null ? result.metrics.fcs_total : (result && result.fcs_snapshot != null ? result.fcs_snapshot : null)
     return (
-      <div style={Object.assign({}, cardStyle, { padding: '40px 32px', textAlign: 'center' })}>
+      <div style={Object.assign({}, cardStyle, { padding: m ? '32px 20px' : '40px 32px', textAlign: 'center' })}>
         <div style={{ width: 48, height: 48, border: '2px solid ' + C.text, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5 10l3.5 3.5L15 7" stroke={C.text} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </div>
-        <h3 style={{ fontSize: 20, fontWeight: 600, color: C.text, margin: '0 0 8px', letterSpacing: '-0.02em' }}>Check-in recorded.</h3>
+        <h3 style={{ fontSize: m ? 18 : 20, fontWeight: 600, color: C.text, margin: '0 0 8px', letterSpacing: '-0.02em' }}>Check-in recorded.</h3>
         <p style={{ fontSize: 13, color: C.muted, margin: '0 0 28px' }}>Your Financial Confidence Score has been updated. See you tomorrow.</p>
         {result && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 40, marginBottom: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: m ? 28 : 40, marginBottom: 24 }}>
             <div>
-              <div style={{ fontSize: 36, fontWeight: 300, color: C.text, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>{fcsScore != null ? fcsScore.toFixed(1) : '—'}</div>
+              <div style={{ fontSize: m ? 28 : 36, fontWeight: 300, color: C.text, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>{fcsScore != null ? fcsScore.toFixed(1) : '—'}</div>
               <div style={{ fontSize: 11, color: C.dim, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Your FCS</div>
             </div>
             <div>
-              <div style={{ fontSize: 36, fontWeight: 300, color: C.text, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>{result.responses_saved || 0}</div>
+              <div style={{ fontSize: m ? 28 : 36, fontWeight: 300, color: C.text, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>{result.responses_saved || 0}</div>
               <div style={{ fontSize: 11, color: C.dim, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Responses</div>
             </div>
           </div>
@@ -123,14 +125,13 @@ export default function DailyCheckin(props) {
             </p>
           </div>
         )}
-        {isWeekly && (<p style={{ fontSize: 11, color: C.dim, marginTop: 16 }}>Weekly behavioral data included — your profile is getting sharper.</p>)}
       </div>
     )
   }
 
   if (questions.length === 0) {
     return (
-      <div style={Object.assign({}, cardStyle, { padding: '40px 32px', textAlign: 'center' })}>
+      <div style={Object.assign({}, cardStyle, { padding: m ? '32px 20px' : '40px 32px', textAlign: 'center' })}>
         <div style={{ width: 48, height: 48, border: '2px solid ' + C.text, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5 10l3.5 3.5L15 7" stroke={C.text} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </div>
@@ -146,7 +147,8 @@ export default function DailyCheckin(props) {
   return (
     <div style={Object.assign({}, cardStyle, { overflow: 'hidden' })}>
       <style>{"@import url('https://fonts.cdnfonts.com/css/geist');"}</style>
-      <div style={{ padding: '28px 28px 16px' }}>
+
+      <div style={{ padding: px + 'px ' + px + 'px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <span style={{ fontSize: 11, fontWeight: 500, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             {currentQuestion.is_weekly ? 'Weekly Behavioral Profile' : 'Daily Check-In'}
@@ -157,83 +159,109 @@ export default function DailyCheckin(props) {
           <div style={{ height: '100%', borderRadius: 1, width: progress + '%', background: C.text, transition: 'width 0.4s ease' }} />
         </div>
       </div>
-      <div style={{ padding: '12px 28px 28px' }}>
+
+      <div style={{ padding: '12px ' + px + 'px ' + px + 'px' }}>
         <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 500, color: C.dim, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 12, padding: '4px 10px', borderRadius: 4, border: '1px solid ' + C.border }}>
           {formatDimension(currentQuestion.dimension)}
         </span>
-        <h2 style={{ fontSize: 20, fontWeight: 500, color: C.text, lineHeight: 1.5, margin: '0 0 28px', letterSpacing: '-0.01em' }}>{currentQuestion.question_text}</h2>
+        <h2 style={{ fontSize: m ? 17 : 20, fontWeight: 500, color: C.text, lineHeight: 1.5, margin: '0 0 24px', letterSpacing: '-0.01em' }}>{currentQuestion.question_text}</h2>
 
+        {/* Scale 1-5 */}
         {qType === 'scale_5' && (<div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
             <span style={{ fontSize: 11, color: C.dim }}>{labels.low}</span><span style={{ fontSize: 11, color: C.dim }}>{labels.high}</span>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: m ? 6 : 8 }}>
             {[1, 2, 3, 4, 5].map(function (num) {
               var isSelected = answers[currentQuestion.question_id] === num
               return (<button key={num} onClick={function () { handleAnswer(currentQuestion.question_id, num) }} style={{
-                flex: 1, padding: '16px 0', borderRadius: 8, fontSize: 16, fontWeight: isSelected ? 600 : 400, fontFamily: FONT, cursor: 'pointer', transition: 'all 0.15s ease',
-                background: isSelected ? C.text : 'transparent', color: isSelected ? C.bg : C.muted, border: '1px solid ' + (isSelected ? C.text : C.faint), fontVariantNumeric: 'tabular-nums',
-              }}
-                onMouseEnter={function (e) { if (!isSelected) { e.target.style.borderColor = C.muted; e.target.style.color = C.text } }}
-                onMouseLeave={function (e) { if (!isSelected) { e.target.style.borderColor = C.faint; e.target.style.color = C.muted } }}
-              >{num}</button>)
+                flex: 1, padding: m ? '14px 0' : '16px 0', borderRadius: 8, fontSize: m ? 15 : 16, fontWeight: isSelected ? 600 : 400,
+                fontFamily: FONT, cursor: 'pointer', transition: 'all 0.15s ease',
+                background: isSelected ? C.text : 'transparent', color: isSelected ? C.bg : C.muted,
+                border: '1px solid ' + (isSelected ? C.text : C.faint), fontVariantNumeric: 'tabular-nums',
+              }}>{num}</button>)
             })}
           </div>
         </div>)}
 
+        {/* Slider 1-10 */}
         {qType === 'slider' && (<div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
             <span style={{ fontSize: 11, color: C.dim }}>{labels.low}</span><span style={{ fontSize: 11, color: C.dim }}>{labels.high}</span>
           </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (num) {
-              var isSelected = answers[currentQuestion.question_id] === num
-              return (<button key={num} onClick={function () { handleAnswer(currentQuestion.question_id, num) }} style={{
-                flex: 1, padding: '12px 0', borderRadius: 6, fontSize: 13, fontWeight: isSelected ? 600 : 400, fontFamily: FONT, cursor: 'pointer', transition: 'all 0.15s ease',
-                background: isSelected ? C.text : 'transparent', color: isSelected ? C.bg : C.muted, border: '1px solid ' + (isSelected ? C.text : C.faint), fontVariantNumeric: 'tabular-nums',
-              }}
-                onMouseEnter={function (e) { if (!isSelected) { e.target.style.borderColor = C.muted; e.target.style.color = C.text } }}
-                onMouseLeave={function (e) { if (!isSelected) { e.target.style.borderColor = C.faint; e.target.style.color = C.muted } }}
-              >{num}</button>)
-            })}
-          </div>
+          {m ? (
+            /* Mobile: 2 rows of 5 */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[1, 2, 3, 4, 5].map(function (num) {
+                  var isSelected = answers[currentQuestion.question_id] === num
+                  return (<button key={num} onClick={function () { handleAnswer(currentQuestion.question_id, num) }} style={{
+                    flex: 1, padding: '14px 0', borderRadius: 6, fontSize: 14, fontWeight: isSelected ? 600 : 400,
+                    fontFamily: FONT, cursor: 'pointer', transition: 'all 0.15s ease',
+                    background: isSelected ? C.text : 'transparent', color: isSelected ? C.bg : C.muted,
+                    border: '1px solid ' + (isSelected ? C.text : C.faint), fontVariantNumeric: 'tabular-nums',
+                  }}>{num}</button>)
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[6, 7, 8, 9, 10].map(function (num) {
+                  var isSelected = answers[currentQuestion.question_id] === num
+                  return (<button key={num} onClick={function () { handleAnswer(currentQuestion.question_id, num) }} style={{
+                    flex: 1, padding: '14px 0', borderRadius: 6, fontSize: 14, fontWeight: isSelected ? 600 : 400,
+                    fontFamily: FONT, cursor: 'pointer', transition: 'all 0.15s ease',
+                    background: isSelected ? C.text : 'transparent', color: isSelected ? C.bg : C.muted,
+                    border: '1px solid ' + (isSelected ? C.text : C.faint), fontVariantNumeric: 'tabular-nums',
+                  }}>{num}</button>)
+                })}
+              </div>
+            </div>
+          ) : (
+            /* Desktop: single row */
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (num) {
+                var isSelected = answers[currentQuestion.question_id] === num
+                return (<button key={num} onClick={function () { handleAnswer(currentQuestion.question_id, num) }} style={{
+                  flex: 1, padding: '12px 0', borderRadius: 6, fontSize: 13, fontWeight: isSelected ? 600 : 400,
+                  fontFamily: FONT, cursor: 'pointer', transition: 'all 0.15s ease',
+                  background: isSelected ? C.text : 'transparent', color: isSelected ? C.bg : C.muted,
+                  border: '1px solid ' + (isSelected ? C.text : C.faint), fontVariantNumeric: 'tabular-nums',
+                }}>{num}</button>)
+              })}
+            </div>
+          )}
         </div>)}
 
+        {/* Yes/No */}
         {qType === 'yes_no' && (<div style={{ display: 'flex', gap: 12 }}>
           {[{ label: 'Yes', value: 'Yes' }, { label: 'No', value: 'No' }].map(function (opt) {
             var isSelected = answers[currentQuestion.question_id] === opt.value
             return (<button key={opt.value} onClick={function () { handleAnswer(currentQuestion.question_id, opt.value) }} style={{
-              flex: 1, padding: '20px 0', borderRadius: 8, fontSize: 15, fontWeight: isSelected ? 600 : 400, fontFamily: FONT, cursor: 'pointer', transition: 'all 0.15s ease',
-              background: isSelected ? C.text : 'transparent', color: isSelected ? C.bg : C.muted, border: '1px solid ' + (isSelected ? C.text : C.faint),
-            }}
-              onMouseEnter={function (e) { if (!isSelected) { e.target.style.borderColor = C.muted; e.target.style.color = C.text } }}
-              onMouseLeave={function (e) { if (!isSelected) { e.target.style.borderColor = C.faint; e.target.style.color = C.muted } }}
-            >{opt.label}</button>)
+              flex: 1, padding: m ? '18px 0' : '20px 0', borderRadius: 8, fontSize: 15, fontWeight: isSelected ? 600 : 400,
+              fontFamily: FONT, cursor: 'pointer', transition: 'all 0.15s ease',
+              background: isSelected ? C.text : 'transparent', color: isSelected ? C.bg : C.muted,
+              border: '1px solid ' + (isSelected ? C.text : C.faint),
+            }}>{opt.label}</button>)
           })}
         </div>)}
       </div>
 
-      <div style={{ padding: '0 28px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* Navigation */}
+      <div style={{ padding: '0 ' + px + 'px ' + px + 'px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button onClick={function () { setCurrentIndex(function (p) { return p - 1 }) }} style={{
           fontSize: 13, padding: '8px 16px', borderRadius: 6, border: '1px solid ' + C.border, background: 'transparent',
-          color: C.muted, cursor: 'pointer', fontFamily: FONT, visibility: currentIndex > 0 ? 'visible' : 'hidden', transition: 'all 0.15s ease',
-        }}
-          onMouseEnter={function (e) { e.target.style.borderColor = C.muted; e.target.style.color = C.text }}
-          onMouseLeave={function (e) { e.target.style.borderColor = C.border; e.target.style.color = C.muted }}
-        >Back</button>
+          color: C.muted, cursor: 'pointer', fontFamily: FONT, visibility: currentIndex > 0 ? 'visible' : 'hidden',
+        }}>Back</button>
 
         {isLastQuestion && allAnswered ? (
           <button onClick={handleSubmit} disabled={submitting} style={{
-            fontSize: 14, fontWeight: 600, padding: '12px 28px', borderRadius: 8, border: 'none', fontFamily: FONT,
-            background: C.text, color: C.bg, cursor: submitting ? 'wait' : 'pointer', opacity: submitting ? 0.5 : 1, transition: 'opacity 0.2s ease',
-          }}
-            onMouseEnter={function (e) { if (!submitting) e.target.style.opacity = '0.85' }}
-            onMouseLeave={function (e) { if (!submitting) e.target.style.opacity = '1' }}
-          >{submitting ? 'Saving...' : 'Complete Check-In'}</button>
+            fontSize: 14, fontWeight: 600, padding: m ? '14px 24px' : '12px 28px', borderRadius: 8, border: 'none', fontFamily: FONT,
+            background: C.text, color: C.bg, cursor: submitting ? 'wait' : 'pointer', opacity: submitting ? 0.5 : 1,
+          }}>{submitting ? 'Saving...' : 'Complete Check-In'}</button>
         ) : (
           <button onClick={function () { setCurrentIndex(function (p) { return p + 1 }) }} disabled={!answered} style={{
-            fontSize: 13, fontWeight: 500, padding: '10px 24px', borderRadius: 6, border: '1px solid ' + (answered ? C.text : C.border),
-            background: 'transparent', fontFamily: FONT, color: answered ? C.text : C.dim, cursor: answered ? 'pointer' : 'default', transition: 'all 0.15s ease',
+            fontSize: 13, fontWeight: 500, padding: m ? '12px 20px' : '10px 24px', borderRadius: 6,
+            border: '1px solid ' + (answered ? C.text : C.border), background: 'transparent', fontFamily: FONT,
+            color: answered ? C.text : C.dim, cursor: answered ? 'pointer' : 'default',
           }}>Next</button>
         )}
       </div>
