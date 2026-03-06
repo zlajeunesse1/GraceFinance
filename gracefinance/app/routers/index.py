@@ -6,6 +6,7 @@ Endpoints:
   GET  /index/history      → GFCI over time for trending
   POST /index/compute      → Manually trigger index computation (dev/admin)
   POST /index/reset        → Wipe index data and start fresh (dev only)
+  POST /index/migrate-streak → Add streak columns (run once, then remove)
   GET  /index/methodology  → Public methodology documentation
 
 Wired to: app/services/gfci_engine.py (v4 institutional engine)
@@ -122,6 +123,28 @@ def reset_index(
     db.query(DailyIndex).delete()
     db.commit()
     return {"message": f"Deleted {count} index rows. Ready for fresh compute."}
+
+
+@router.post("/migrate-streak")
+def migrate_streak(db: Session = Depends(get_db)):
+    """Temporary: add streak columns to users table. Run once then remove."""
+    from sqlalchemy import text
+    results = []
+    try:
+        db.execute(text("ALTER TABLE users ADD COLUMN current_streak INTEGER NOT NULL DEFAULT 0"))
+        db.commit()
+        results.append("Added current_streak")
+    except Exception as e:
+        db.rollback()
+        results.append(f"current_streak: {str(e)[:80]}")
+    try:
+        db.execute(text("ALTER TABLE users ADD COLUMN last_checkin_date TIMESTAMP WITH TIME ZONE"))
+        db.commit()
+        results.append("Added last_checkin_date")
+    except Exception as e:
+        db.rollback()
+        results.append(f"last_checkin_date: {str(e)[:80]}")
+    return {"results": results}
 
 
 @router.get("/methodology")
