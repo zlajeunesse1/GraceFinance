@@ -7,9 +7,6 @@ Run locally:
 
 API docs available at:
     http://localhost:8000/docs
-
-v2 UPDATE: Added social feed router
-FIXED: Added dashboard_router to imports
 """
 
 from fastapi import FastAPI
@@ -27,8 +24,7 @@ from app.routers import (
 )
 from app.routers.grace import router as grace_router
 from app.routers.profile import router as profile_router
-from app.routers import me_router, index_summary_router, sse_router
-from app.services.index_worker import start_scheduler, stop_scheduler
+from app.routers import me_router
 
 settings = get_settings()
 
@@ -41,7 +37,7 @@ is_prod = settings.app_env == "production"
 app = FastAPI(
     title="GraceFinance API",
     description="Smarter Finance is Right Around the Corner™",
-    version="2.0.0",
+    version="4.0.0",
     docs_url=None if is_prod else "/docs",
     redoc_url=None if is_prod else "/redoc",
 )
@@ -96,12 +92,10 @@ app.include_router(grace_router)
 # ── User Profile ──
 app.include_router(profile_router)
 
-# ── Reward Loop ──
+# ── User Metrics ──
 app.include_router(me_router)
-app.include_router(index_summary_router)
-app.include_router(sse_router)
 
-# ── Social Feed (NEW v2) ──
+# ── Social Feed ──
 app.include_router(feed_router)
 
 
@@ -110,7 +104,7 @@ def root():
     return {
         "app": "GraceFinance",
         "tagline": "Smarter Finance is Right Around the Corner™",
-        "version": "2.0.0",
+        "version": "4.0.0",
         "docs": "/docs" if not is_prod else None,
         "data_engine": {
             "checkin": "/checkin/questions",
@@ -128,13 +122,3 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "engine": "active", "grace": "online", "feed": "active"}
-
-
-@app.on_event("startup")
-def on_startup():
-    start_scheduler()
-
-
-@app.on_event("shutdown")
-def on_shutdown():
-    stop_scheduler()
