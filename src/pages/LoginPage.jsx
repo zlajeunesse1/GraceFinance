@@ -1,6 +1,6 @@
 /**
  * LoginPage — v5 Polish
- * FCS-forward. Warm. Premium.
+ * FCS-forward. Warm. Premium. Stats bar matches SignupPage.
  */
 
 import { useState } from 'react'
@@ -57,6 +57,18 @@ export default function LoginPage() {
           </p>
         </div>
         <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', gap: 32, marginBottom: 32 }}>
+            {[
+              { num: '5', label: 'Behavioral dimensions' },
+              { num: '< 2min', label: 'Daily check-in' },
+              { num: '24/7', label: 'AI coaching' },
+            ].map(function (stat) {
+              return (<div key={stat.label}>
+                <div style={{ fontSize: 20, fontWeight: 600, color: '#ffffff', letterSpacing: '-0.02em' }}>{stat.num}</div>
+                <div style={{ fontSize: 11, color: '#555555', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{stat.label}</div>
+              </div>)
+            })}
+          </div>
           <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 20 }}>
             <p style={{ fontSize: 12, color: '#444444', margin: 0, letterSpacing: '0.02em' }}>Where Financial Confidence Is Measured</p>
           </div>
