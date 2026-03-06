@@ -4,26 +4,22 @@ GraceFinance Reward Engine
 Computes the instant gratification payload after a check-in.
 
 Layer A (Instant): This runs synchronously inside POST /checkins.
-It does NOT touch the DailyIndex — that's Layer B (scheduled).
 
 Responsibilities:
   1. Compute before/after score deltas per dimension
   2. Calculate and update streak
   3. Generate Grace mini-summary (deterministic, no API call)
   4. Pick the weakest dimension and a behavior nudge
-  5. Enqueue the contribution event for the index pipeline
 
 Place at: app/services/reward_engine.py
 """
 
 from datetime import datetime, date, timezone, timedelta
 from typing import Optional, Dict, Tuple
-from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, cast, Date
 
 from app.models.checkin import CheckInResponse, UserMetricSnapshot
-from app.models.contribution_queue import IndexContributionEvent
 from app.services.checkin_service import FCS_WEIGHTS
 
 
@@ -56,8 +52,8 @@ DIMENSION_META = {
             "Before your next purchase over $30, wait 24 hours. The pause reveals the pattern.",
         ],
     },
-    "debt_pressure": {
-        "label": "Debt Pressure",
+    "emergency_readiness": {
+        "label": "Emergency Readiness",
         "tips": [
             "Transfer $10 to savings today. The amount doesn't matter — the habit does.",
             "Calculate how many days your savings would cover if income stopped. Know your number.",
@@ -97,9 +93,9 @@ GRACE_SUMMARIES = {
         "Scores fluctuate. What doesn't fluctuate is the fact that you showed up today.",
     ],
     "milestone_streak": [
-        "🔥 {streak} days in a row. Most people don't make it past day 3. You're built different.",
-        "🔥 {streak}-day streak. That's not discipline — that's identity. You're a person who checks in.",
-        "🔥 {streak} consecutive days. The compound effect of awareness is your unfair advantage.",
+        "{streak} days in a row. Most people don't make it past day 3. You're built different.",
+        "{streak}-day streak. That's not discipline — that's identity. You're a person who checks in.",
+        "{streak} consecutive days. The compound effect of awareness is your unfair advantage.",
     ],
     "first_checkin": [
         "Welcome to GraceFinance. This first check-in just created your baseline — every future score builds from here.",
@@ -109,7 +105,7 @@ GRACE_SUMMARIES = {
 
 
 def _pick_summary(scenario: str, streak: int = 0) -> str:
-    """Pick a deterministic-ish summary based on today's date (so it varies daily)."""
+    """Pick a deterministic-ish summary based on today's date."""
     import hashlib
 
     summaries = GRACE_SUMMARIES.get(scenario, GRACE_SUMMARIES["steady"])
@@ -132,8 +128,8 @@ def compute_reward(
     Returns a dict matching the CheckinReward schema.
     """
 
-    # -- 1. Streak calculation + update --
-    streak, is_milestone = _update_streak(db, user_id)
+    # -- 1. Streak calculation --
+    streak, is_milestone = _compute_streak(db, user_id)
 
     # -- 2. Score deltas --
     deltas = _compute_deltas(new_snapshot, previous_snapshot)
@@ -158,16 +154,6 @@ def compute_reward(
     # -- 4. Weakest dimension + nudge --
     weakest_dim, nudge = _pick_nudge(new_snapshot)
 
-    # -- 5. Enqueue contribution event --
-    _enqueue_contribution(db, user_id, new_snapshot)
-
-    # -- 6. Next update window --
-    now = datetime.now(timezone.utc)
-    if now.hour < 18:
-        next_window = "later today"
-    else:
-        next_window = "tomorrow morning"
-
     return {
         "streak": streak,
         "streak_is_milestone": is_milestone,
@@ -175,11 +161,6 @@ def compute_reward(
         "deltas": deltas,
         "weakest_dimension": weakest_dim,
         "behavior_nudge": nudge,
-        "contribution": {
-            "status": "queued",
-            "message": "Your check-in will be reflected in the next Index update",
-            "next_update_window": next_window,
-        },
     }
 
 
@@ -187,17 +168,13 @@ def compute_reward(
 #  INTERNAL HELPERS
 # ============================================================
 
-def _update_streak(db: Session, user_id) -> Tuple[int, bool]:
+def _compute_streak(db: Session, user_id) -> Tuple[int, bool]:
     """
-    Compute streak from check-in history and update user.last_checkin_at.
+    Compute streak from check-in history.
     Returns (streak_count, is_milestone).
     """
-    from app.models import User
-
-    user = db.query(User).filter(User.id == user_id).first()
     today = date.today()
 
-    # Get distinct check-in dates for this user, ordered descending
     checkin_dates = (
         db.query(func.distinct(cast(CheckInResponse.checkin_date, Date)))
         .filter(CheckInResponse.user_id == user_id)
@@ -206,39 +183,32 @@ def _update_streak(db: Session, user_id) -> Tuple[int, bool]:
         .all()
     )
 
-    # Flatten to list of date objects
     dates = sorted([row[0] for row in checkin_dates], reverse=True)
 
     if not dates:
-        streak = 1
-    else:
-        streak = 1  # Today counts
-        for i in range(len(dates) - 1):
-            if dates[i] == today and i == 0:
-                # Skip today since we just checked in
-                continue
-            expected_prev = dates[i] - timedelta(days=1)
-            if i + 1 < len(dates) and dates[i + 1] == expected_prev:
-                streak += 1
-            else:
-                break
+        return 1, (1 in MILESTONE_STREAKS)
 
-        # If today wasn't in the list yet (first check-in today), count from yesterday
-        if dates[0] != today:
-            if dates[0] == today - timedelta(days=1):
-                streak = 1  # Today extends the streak
-                for i in range(len(dates) - 1):
-                    if dates[i] - timedelta(days=1) == dates[i + 1]:
-                        streak += 1
-                    else:
-                        break
-                streak += 1  # Add today
-            else:
-                streak = 1  # Streak broken
+    streak = 1
+    for i in range(len(dates) - 1):
+        if dates[i] == today and i == 0:
+            continue
+        expected_prev = dates[i] - timedelta(days=1)
+        if i + 1 < len(dates) and dates[i + 1] == expected_prev:
+            streak += 1
+        else:
+            break
 
-    # Update user's last_checkin_at
-    user.last_checkin_at = datetime.now(timezone.utc)
-    db.flush()
+    if dates[0] != today:
+        if dates[0] == today - timedelta(days=1):
+            streak = 1
+            for i in range(len(dates) - 1):
+                if dates[i] - timedelta(days=1) == dates[i + 1]:
+                    streak += 1
+                else:
+                    break
+            streak += 1
+        else:
+            streak = 1
 
     is_milestone = streak in MILESTONE_STREAKS
     return streak, is_milestone
@@ -254,7 +224,7 @@ def _compute_deltas(
         "current_stability",
         "future_outlook",
         "purchasing_power",
-        "debt_pressure",
+        "emergency_readiness",
         "financial_agency",
     ]
 
@@ -284,11 +254,11 @@ def _pick_nudge(snapshot: UserMetricSnapshot) -> Tuple[Optional[str], Optional[d
     """Find the weakest dimension and return a nudge for it."""
     dims = [
         "current_stability", "future_outlook", "purchasing_power",
-        "debt_pressure", "financial_agency",
+        "emergency_readiness", "financial_agency",
     ]
 
     weakest_dim = None
-    weakest_val = 2.0  # Higher than any possible normalized score
+    weakest_val = 2.0
 
     for dim in dims:
         val = float(getattr(snapshot, dim, 0) or 0)
@@ -309,38 +279,3 @@ def _pick_nudge(snapshot: UserMetricSnapshot) -> Tuple[Optional[str], Optional[d
         }
 
     return None, None
-
-
-def _enqueue_contribution(db: Session, user_id, snapshot: UserMetricSnapshot):
-    """Append to the contribution queue (idempotent per user+date)."""
-    from sqlalchemy.dialects.postgresql import insert
-
-    today = date.today()
-
-    stmt = insert(IndexContributionEvent).values(
-        user_id=user_id,
-        checkin_date=today,
-        fcs_composite=snapshot.fcs_composite,
-        current_stability=snapshot.current_stability,
-        future_outlook=snapshot.future_outlook,
-        purchasing_power=snapshot.purchasing_power,
-        debt_pressure=snapshot.debt_pressure,
-        financial_agency=snapshot.financial_agency,
-        bsi_score=snapshot.bsi_score,
-        status="pending",
-    ).on_conflict_do_update(
-        index_elements=["user_id", "checkin_date"],
-        set_={
-            "fcs_composite": snapshot.fcs_composite,
-            "current_stability": snapshot.current_stability,
-            "future_outlook": snapshot.future_outlook,
-            "purchasing_power": snapshot.purchasing_power,
-            "debt_pressure": snapshot.debt_pressure,
-            "financial_agency": snapshot.financial_agency,
-            "bsi_score": snapshot.bsi_score,
-            "status": "pending",
-            "created_at": datetime.now(timezone.utc),
-        },
-    )
-    db.execute(stmt)
-    db.flush()
