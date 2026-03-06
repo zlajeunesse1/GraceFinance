@@ -1,13 +1,9 @@
 /**
- * IndexPage — GFCI Institutional Dashboard
+ * IndexPage — v5 Polish
  *
- * Wired to:
- *   GET  /index/latest       → Current GFCI composite + trend
- *   GET  /index/history      → 30-day trend data for chart
- *   POST /index/compute      → Trigger GFCI computation
- *   GET  /index/methodology  → Public methodology
- *
- * Design: Bloomberg-inspired. Data-dense, monochrome.
+ * GFCI positioned as a premium financial confidence indicator.
+ * Paywall-ready structure. Real-time data display.
+ * Hidden dev compute trigger (triple-click the label).
  */
 
 import { useState, useEffect } from "react"
@@ -37,9 +33,7 @@ function apiFetch(endpoint, options) {
     for (var k in options) {
       if (k === "headers") {
         for (var h in options.headers) headers[h] = options.headers[h]
-      } else {
-        config[k] = options[k]
-      }
+      } else { config[k] = options[k] }
     }
   }
   config.headers = headers
@@ -50,25 +44,10 @@ function apiFetch(endpoint, options) {
 }
 
 function Card(props) {
-  return (
-    <div style={{
-      background: C.card, border: "1px solid " + C.border,
-      borderRadius: 10, padding: 24, ...(props.style || {}),
-    }}>
-      {props.children}
-    </div>
-  )
+  return (<div style={{ background: C.card, border: "1px solid " + C.border, borderRadius: 12, padding: 24, ...(props.style || {}) }}>{props.children}</div>)
 }
-
 function Label(props) {
-  return (
-    <span style={{
-      fontSize: 11, fontWeight: 500, color: C.muted,
-      textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: FONT,
-    }}>
-      {props.children}
-    </span>
-  )
+  return (<span style={{ fontSize: 11, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: FONT, ...(props.style || {}) }}>{props.children}</span>)
 }
 
 function Nav(props) {
@@ -97,49 +76,29 @@ function Nav(props) {
 }
 
 function getTrendLabel(direction) {
-  if (direction === "UP") return "Trending Up"
-  if (direction === "DOWN") return "Trending Down"
-  return "Flat"
+  if (direction === "UP") return "Rising"
+  if (direction === "DOWN") return "Declining"
+  return "Holding Steady"
 }
 
 function getIndexHealthLabel(value) {
-  if (value >= 70) return "Strong Confidence"
-  if (value >= 55) return "Moderate Confidence"
-  if (value >= 40) return "Mixed Signals"
-  if (value >= 25) return "Elevated Stress"
-  return "High Stress"
+  if (value >= 75) return "Population confidence is high — financial behavior is stable and forward-looking."
+  if (value >= 60) return "Confidence is solid — most users are managing their finances with intention."
+  if (value >= 45) return "Mixed signals — some users are building, others are under pressure."
+  if (value >= 30) return "Confidence is stressed — behavioral indicators show increasing caution."
+  return "Elevated financial stress across the population."
 }
 
 export default function IndexPage() {
-  var auth = useAuth()
-  var logout = auth.logout
-  var navigate = useNavigate()
+  var auth = useAuth(); var logout = auth.logout; var navigate = useNavigate()
+  var mountedState = useState(false); var mounted = mountedState[0]; var setMounted = mountedState[1]
+  var latestState = useState(null); var latest = latestState[0]; var setLatest = latestState[1]
+  var historyState = useState([]); var history = historyState[0]; var setHistory = historyState[1]
+  var loadingState = useState(true); var loading = loadingState[0]; var setLoading = loadingState[1]
+  var methodologyState = useState(null); var methodology = methodologyState[0]; var setMethodology = methodologyState[1]
+  var showMethodState = useState(false); var showMethod = showMethodState[0]; var setShowMethod = showMethodState[1]
 
-  var mountedState = useState(false)
-  var mounted = mountedState[0]; var setMounted = mountedState[1]
-
-  var latestState = useState(null)
-  var latest = latestState[0]; var setLatest = latestState[1]
-
-  var historyState = useState([])
-  var history = historyState[0]; var setHistory = historyState[1]
-
-  var loadingState = useState(true)
-  var loading = loadingState[0]; var setLoading = loadingState[1]
-
-  var methodologyState = useState(null)
-  var methodology = methodologyState[0]; var setMethodology = methodologyState[1]
-
-  var showMethodState = useState(false)
-  var showMethod = showMethodState[0]; var setShowMethod = showMethodState[1]
-
-  var computingState = useState(false)
-  var computing = computingState[0]; var setComputing = computingState[1]
-
-  useEffect(function () {
-    setMounted(true)
-    loadData()
-  }, [])
+  useEffect(function () { setMounted(true); loadData() }, [])
 
   function loadData() {
     setLoading(true)
@@ -147,34 +106,27 @@ export default function IndexPage() {
       apiFetch("/index/latest").catch(function () { return null }),
       apiFetch("/index/history?days=30").catch(function () { return { data_points: [] } }),
     ]).then(function (results) {
-      setLatest(results[0])
-      setHistory(results[1] ? results[1].data_points || [] : [])
-      setLoading(false)
+      setLatest(results[0]); setHistory(results[1] ? results[1].data_points || [] : []); setLoading(false)
     })
   }
 
   function loadMethodology() {
-    if (methodology) {
-      setShowMethod(!showMethod)
-      return
+    if (methodology) { setShowMethod(!showMethod); return }
+    apiFetch("/index/methodology").then(function (data) { setMethodology(data); setShowMethod(true) }).catch(function () {})
+  }
+
+  /* Hidden dev trigger — triple-click the GFCI label to compute */
+  var clickCountState = useState(0); var clickCount = clickCountState[0]; var setClickCount = clickCountState[1]
+  function handleLabelClick() {
+    var newCount = clickCount + 1
+    setClickCount(newCount)
+    if (newCount >= 3) {
+      setClickCount(0)
+      apiFetch("/index/compute", { method: "POST" }).then(function () { loadData() }).catch(function () {})
     }
-    apiFetch("/index/methodology").then(function (data) {
-      setMethodology(data)
-      setShowMethod(true)
-    }).catch(function () {})
+    setTimeout(function () { setClickCount(0) }, 1500)
   }
 
-  function handleCompute() {
-    setComputing(true)
-    apiFetch("/index/compute", { method: "POST" }).then(function () {
-      loadData()
-      setComputing(false)
-    }).catch(function () {
-      setComputing(false)
-    })
-  }
-
-  /* Derived state */
   var hasData = latest && latest.published === true
   var gfci = hasData ? latest.gfci_composite : null
   var fcsAvg = hasData ? latest.fcs_average : null
@@ -185,11 +137,7 @@ export default function IndexPage() {
   var volatility = hasData ? latest.gci_volatility_7d : null
 
   var chartData = history.map(function (item) {
-    return {
-      date: item.date,
-      gfci: item.gfci ? parseFloat(item.gfci) : null,
-      fcs: item.fcs ? parseFloat(item.fcs) : null,
-    }
+    return { date: item.date, gfci: item.gfci ? parseFloat(item.gfci) : null }
   }).filter(function (d) { return d.gfci != null })
 
   var chartAvg = chartData.length > 0
@@ -208,70 +156,58 @@ export default function IndexPage() {
       <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 24px 60px" }}>
 
         {/* Header */}
-        <div style={{
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          marginBottom: 8, opacity: mounted ? 1 : 0, transition: "opacity 0.5s ease",
-        }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, opacity: mounted ? 1 : 0, transition: "opacity 0.5s ease" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 28, height: 28, border: "1.5px solid " + C.text, borderRadius: 6,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 12, fontWeight: 700,
-            }}>G</div>
+            <div style={{ width: 28, height: 28, border: "1.5px solid " + C.text, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>G</div>
             <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.02em" }}>GraceFinance</span>
           </div>
-          <button
-            onClick={function () { logout(); navigate("/login") }}
-            style={{
-              padding: "6px 14px", fontSize: 12, fontWeight: 500, fontFamily: FONT,
-              cursor: "pointer", background: "transparent", border: "1px solid " + C.border,
-              borderRadius: 6, color: C.dim, transition: "all 0.2s",
-            }}
+          <button onClick={function () { logout(); navigate("/login") }} style={{
+            padding: "6px 14px", fontSize: 12, fontWeight: 500, fontFamily: FONT, cursor: "pointer", background: "transparent",
+            border: "1px solid " + C.border, borderRadius: 6, color: C.dim, transition: "all 0.2s",
+          }}
             onMouseEnter={function (e) { e.target.style.color = C.text; e.target.style.borderColor = C.faint }}
             onMouseLeave={function (e) { e.target.style.color = C.dim; e.target.style.borderColor = C.border }}
           >Sign out</button>
         </div>
 
-        <p style={{ fontSize: 12, color: C.dim, margin: "0 0 20px", letterSpacing: "0.02em" }}>
-          Grace Financial Confidence Index
-        </p>
+        <p style={{ fontSize: 12, color: C.dim, margin: "0 0 20px", letterSpacing: "0.02em" }}>The Financial Confidence Indicator</p>
         <Nav navigate={navigate} active="index" />
 
-        {/* ── HERO: GFCI Composite ── */}
-        <Card style={{ marginBottom: 16, padding: "32px 28px" }}>
-          <Label>GFCI Composite</Label>
+        {/* ── HERO ── */}
+        <Card style={{ marginBottom: 16, padding: "36px 28px" }}>
+          <div onClick={handleLabelClick} style={{ cursor: "default" }}>
+            <Label>GFCI — Grace Financial Confidence Index</Label>
+          </div>
 
-          <div style={{
-            display: "flex", alignItems: "baseline", gap: 16, marginTop: 16, marginBottom: 8,
-          }}>
-            <span style={{
-              fontSize: 56, fontWeight: 300, letterSpacing: "-0.04em",
-              color: C.text, fontVariantNumeric: "tabular-nums",
-            }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginTop: 20, marginBottom: 8 }}>
+            <span style={{ fontSize: 64, fontWeight: 200, letterSpacing: "-0.04em", color: C.text, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
               {gfci != null ? gfci.toFixed(1) : "—"}
             </span>
-            <span style={{
-              fontSize: 16, fontWeight: 500, color: C.muted,
-              textTransform: "uppercase", letterSpacing: "0.06em",
-            }}>
-              {getTrendLabel(trend)}
+            <span style={{ fontSize: 16, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              {hasData ? getTrendLabel(trend) : ""}
             </span>
           </div>
 
           {gfci != null && (
-            <p style={{ fontSize: 13, color: C.dim, margin: "0 0 20px" }}>
+            <p style={{ fontSize: 13, color: C.dim, margin: "0 0 24px", lineHeight: 1.7 }}>
               {getIndexHealthLabel(gfci)}
             </p>
           )}
 
-          {/* Sub-metrics row */}
+          {!hasData && (
+            <p style={{ fontSize: 13, color: C.dim, margin: "0 0 24px", lineHeight: 1.7 }}>
+              The GFCI aggregates Financial Confidence Scores across all users into a single real-time indicator. As more people check in, this number becomes a window into how the population really feels about money.
+            </p>
+          )}
+
+          {/* Sub-metrics */}
           {hasData && (
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               {[
-                { label: "FCS Avg", value: fcsAvg, decimals: 1 },
-                { label: "Users", value: userCount, decimals: 0 },
-                { label: "3d Slope", value: slope3d, decimals: 3, showSign: true },
-                { label: "7d Slope", value: slope7d, decimals: 3, showSign: true },
+                { label: "Avg FCS", value: fcsAvg, decimals: 1 },
+                { label: "Contributors", value: userCount, decimals: 0 },
+                { label: "3d Trend", value: slope3d, decimals: 3, showSign: true },
+                { label: "7d Trend", value: slope7d, decimals: 3, showSign: true },
                 { label: "Volatility", value: volatility, decimals: 3 },
               ].map(function (item) {
                 var display = "—"
@@ -281,55 +217,34 @@ export default function IndexPage() {
                   display = formatted
                 }
                 return (
-                  <div key={item.label} style={{
-                    padding: "8px 14px", borderRadius: 6,
-                    background: C.bg, border: "1px solid " + C.border,
-                  }}>
-                    <div style={{
-                      fontSize: 10, fontWeight: 500, color: C.dim,
-                      textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2,
-                    }}>{item.label}</div>
-                    <div style={{
-                      fontSize: 16, fontWeight: 600, color: C.text,
-                      fontVariantNumeric: "tabular-nums",
-                    }}>{display}</div>
+                  <div key={item.label} style={{ padding: "10px 14px", borderRadius: 8, background: C.bg, border: "1px solid " + C.border }}>
+                    <div style={{ fontSize: 10, fontWeight: 500, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{item.label}</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: C.text, fontVariantNumeric: "tabular-nums" }}>{display}</div>
                   </div>
                 )
               })}
             </div>
           )}
 
-          <div style={{
-            fontSize: 11, color: C.faint,
-            display: "flex", justifyContent: "space-between",
-          }}>
-            <span>{lastUpdated ? "Published " + lastUpdated : "No data published yet"}</span>
-            <span>{userCount > 0 ? userCount + " contributors" : ""}</span>
+          <div style={{ fontSize: 11, color: C.faint, display: "flex", justifyContent: "space-between" }}>
+            <span>{lastUpdated ? "Published " + lastUpdated : "Waiting for first computation"}</span>
+            <span>{userCount > 0 ? userCount + " active contributor" + (userCount > 1 ? "s" : "") : ""}</span>
           </div>
         </Card>
 
         {/* ── TREND CHART ── */}
         {chartData.length > 1 ? (
           <Card style={{ marginBottom: 16, padding: 20 }}>
-            <div style={{
-              display: "flex", justifyContent: "space-between",
-              alignItems: "center", marginBottom: 16,
-            }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <Label>30-Day Trend</Label>
               {chartAvg && (
                 <div style={{ textAlign: "right" }}>
-                  <div style={{
-                    fontSize: 18, fontWeight: 600, color: C.text,
-                    fontFamily: FONT, fontVariantNumeric: "tabular-nums",
-                  }}>{chartAvg}</div>
-                  <div style={{
-                    fontSize: 10, color: C.dim,
-                    textTransform: "uppercase", letterSpacing: "0.06em",
-                  }}>Average</div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: C.text, fontFamily: FONT, fontVariantNumeric: "tabular-nums" }}>{chartAvg}</div>
+                  <div style={{ fontSize: 10, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>Period Avg</div>
                 </div>
               )}
             </div>
-            <ResponsiveContainer width="100%" height={180}>
+            <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gfciGrad" x1="0" y1="0" x2="0" y2="1">
@@ -337,151 +252,73 @@ export default function IndexPage() {
                     <stop offset="95%" stopColor="#ffffff" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: C.dim, fontSize: 10, fontFamily: FONT }}
-                  axisLine={{ stroke: C.border }}
-                  tickLine={false}
-                  tickFormatter={function (d) {
-                    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                  }}
-                />
-                <YAxis
-                  domain={[0, 100]}
-                  tick={{ fill: C.dim, fontSize: 10, fontFamily: FONT }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "#111111", border: "1px solid " + C.border,
-                    borderRadius: 6, padding: "8px 12px", fontFamily: FONT,
-                  }}
-                  labelStyle={{ color: C.muted, fontSize: 11 }}
-                  itemStyle={{ color: C.text, fontSize: 13, fontWeight: 600 }}
-                  labelFormatter={function (d) {
-                    return new Date(d).toLocaleDateString("en-US", {
-                      weekday: "short", month: "short", day: "numeric",
-                    })
-                  }}
-                  formatter={function (val) { return [val.toFixed(1), "GFCI"] }}
-                />
-                {chartAvg && (
-                  <ReferenceLine y={chartAvg} stroke={C.faint} strokeDasharray="4 4" />
-                )}
-                <Area
-                  type="monotone" dataKey="gfci"
-                  stroke="#ffffff" strokeWidth={1.5}
-                  fill="url(#gfciGrad)"
+                <XAxis dataKey="date" tick={{ fill: C.dim, fontSize: 10, fontFamily: FONT }} axisLine={{ stroke: C.border }} tickLine={false}
+                  tickFormatter={function (d) { return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" }) }} />
+                <YAxis domain={[0, 100]} tick={{ fill: C.dim, fontSize: 10, fontFamily: FONT }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ background: "#111111", border: "1px solid " + C.border, borderRadius: 8, padding: "8px 12px", fontFamily: FONT }}
+                  labelStyle={{ color: C.muted, fontSize: 11 }} itemStyle={{ color: C.text, fontSize: 13, fontWeight: 600 }}
+                  labelFormatter={function (d) { return new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) }}
+                  formatter={function (val) { return [val.toFixed(1), "GFCI"] }} />
+                {chartAvg && <ReferenceLine y={chartAvg} stroke={C.faint} strokeDasharray="4 4" />}
+                <Area type="monotone" dataKey="gfci" stroke="#ffffff" strokeWidth={1.5} fill="url(#gfciGrad)"
                   dot={{ r: 2, fill: "#ffffff", stroke: C.bg, strokeWidth: 2 }}
-                  activeDot={{ r: 4, stroke: "#ffffff", strokeWidth: 1, fill: C.bg }}
-                />
+                  activeDot={{ r: 4, stroke: "#ffffff", strokeWidth: 1, fill: C.bg }} />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
         ) : (
           <Card style={{ marginBottom: 16 }}>
             <Label>30-Day Trend</Label>
-            <p style={{ fontSize: 13, color: C.dim, margin: "16px 0 0", lineHeight: 1.6 }}>
-              Need at least 2 index computations to show a trend chart.
-              {userCount === 0 && " Complete check-ins to start generating the index."}
+            <p style={{ fontSize: 13, color: C.dim, margin: "16px 0 0", lineHeight: 1.7 }}>
+              {hasData
+                ? "The trend chart will appear after two or more index computations. Each day adds a new data point."
+                : "As users complete daily check-ins, the GFCI builds a trend line showing how financial confidence moves over time — like watching a market indicator, but for how people actually feel about money."
+              }
             </p>
           </Card>
         )}
 
-        {/* ── COMPUTE TRIGGER (Dev) ── */}
+        {/* ── WHAT IS THE GFCI ── */}
         <Card style={{ marginBottom: 16 }}>
-          <div style={{
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-          }}>
-            <div>
-              <Label>Index Engine</Label>
-              <p style={{ fontSize: 13, color: C.dim, margin: "8px 0 0" }}>
-                Trigger a manual GFCI computation from current user data.
-              </p>
-            </div>
-            <button
-              onClick={handleCompute}
-              disabled={computing}
-              style={{
-                padding: "10px 20px", fontSize: 13, fontWeight: 600,
-                fontFamily: FONT, cursor: computing ? "wait" : "pointer",
-                background: C.text, color: C.bg,
-                border: "none", borderRadius: 8,
-                transition: "opacity 0.2s",
-                opacity: computing ? 0.5 : 1,
-              }}
-              onMouseEnter={function (e) { if (!computing) e.target.style.opacity = "0.85" }}
-              onMouseLeave={function (e) { if (!computing) e.target.style.opacity = "1" }}
-            >
-              {computing ? "Computing..." : "Compute Now"}
-            </button>
-          </div>
+          <Label>What is the GFCI?</Label>
+          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.8, margin: "16px 0 0" }}>
+            The Grace Financial Confidence Index is a real-time behavioral indicator that measures how financially confident the population is — based on actual financial behaviors, not surveys or opinions.
+          </p>
+          <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, margin: "12px 0 0" }}>
+            Traditional indicators like the Consumer Confidence Index ask people how they feel. The GFCI measures what people do — whether they're paying bills on time, building savings, managing debt, or pulling back on spending. Every daily check-in from every user contributes an anonymized signal. The result is a financial confidence reading as close to real-time as it gets.
+          </p>
         </Card>
 
         {/* ── METHODOLOGY ── */}
         <Card style={{ marginBottom: 16 }}>
-          <div style={{
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-            cursor: "pointer",
-          }} onClick={loadMethodology}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={loadMethodology}>
             <Label>Methodology</Label>
-            <span style={{ fontSize: 12, color: C.dim }}>
-              {showMethod ? "Hide" : "View"}
-            </span>
+            <span style={{ fontSize: 12, color: C.dim }}>{showMethod ? "Hide" : "View"}</span>
           </div>
 
           {showMethod && methodology && (
             <div style={{ marginTop: 16 }}>
-              <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.7, margin: "0 0 16px" }}>
-                {methodology.description}
-              </p>
-
-              <div style={{ fontSize: 12, color: C.dim, marginBottom: 8 }}>
-                Version {methodology.version} — Computed {methodology.computation_schedule}
-              </div>
+              <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.7, margin: "0 0 16px" }}>{methodology.description}</p>
+              <div style={{ fontSize: 12, color: C.dim, marginBottom: 8 }}>Version {methodology.version} — Computed {methodology.computation_schedule}</div>
 
               {methodology.scoring_engine && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{
-                    fontSize: 11, fontWeight: 500, color: C.muted,
-                    textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8,
-                  }}>Pillars</div>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>FCS Pillars</div>
                   {Object.entries(methodology.scoring_engine.pillars).map(function (entry) {
-                    var key = entry[0]
-                    var val = entry[1]
-                    return (
-                      <div key={key} style={{
-                        display: "flex", justifyContent: "space-between",
-                        padding: "6px 0", borderBottom: "1px solid " + C.border,
-                      }}>
-                        <span style={{ fontSize: 12, color: C.muted }}>
-                          {key.replace(/_/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase() })}
-                        </span>
-                        <span style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>
-                          {Math.round(val.weight * 100)}%
-                        </span>
-                      </div>
-                    )
+                    var key = entry[0]; var val = entry[1]
+                    return (<div key={key} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid " + C.border }}>
+                      <span style={{ fontSize: 12, color: C.muted }}>{key.replace(/_/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase() })}</span>
+                      <span style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>{Math.round(val.weight * 100)}%</span>
+                    </div>)
                   })}
                 </div>
               )}
 
               {methodology.data_integrity && (
                 <div style={{ marginTop: 16 }}>
-                  <div style={{
-                    fontSize: 11, fontWeight: 500, color: C.muted,
-                    textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8,
-                  }}>Data Integrity</div>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Signal Integrity</div>
                   {methodology.data_integrity.map(function (item, i) {
-                    return (
-                      <div key={i} style={{
-                        fontSize: 12, color: C.dim, padding: "4px 0",
-                        borderBottom: i < methodology.data_integrity.length - 1 ? "1px solid " + C.border : "none",
-                      }}>
-                        {item}
-                      </div>
-                    )
+                    return (<div key={i} style={{ fontSize: 12, color: C.dim, padding: "4px 0", borderBottom: i < methodology.data_integrity.length - 1 ? "1px solid " + C.border : "none" }}>{item}</div>)
                   })}
                 </div>
               )}
@@ -490,23 +327,16 @@ export default function IndexPage() {
         </Card>
 
         {/* ── PRIVACY ── */}
-        <Card style={{ marginBottom: 16, padding: "14px 16px" }}>
-          <div style={{
-            fontSize: 11, fontWeight: 500, color: C.dim,
-            textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6,
-          }}>Privacy</div>
-          <p style={{ fontSize: 12, color: C.faint, lineHeight: 1.6, margin: 0 }}>
-            The GFCI aggregates anonymous behavioral check-in data. No individual data is
-            identifiable. Your scores are visible only to you. The index reflects population-level
-            patterns, not individual behavior.
+        <Card style={{ marginBottom: 16, padding: "16px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 500, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Privacy & Data</div>
+          <p style={{ fontSize: 12, color: C.faint, lineHeight: 1.7, margin: 0 }}>
+            The GFCI is built from anonymized behavioral data. No individual user can be identified from the index. Your Financial Confidence Score is visible only to you. The index reflects collective patterns — never individual behavior.
           </p>
         </Card>
 
         {/* Footer */}
         <div style={{ borderTop: "1px solid " + C.border, paddingTop: 20, textAlign: "center", marginTop: 32 }}>
-          <p style={{ color: C.dim, fontSize: 11, margin: 0, letterSpacing: "0.02em" }}>
-            GraceFinance — The Behavioral Finance Company
-          </p>
+          <p style={{ color: C.dim, fontSize: 11, margin: 0, letterSpacing: "0.02em" }}>GraceFinance — Where Financial Confidence Is Measured</p>
         </div>
       </div>
     </div>
