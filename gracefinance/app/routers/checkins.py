@@ -28,6 +28,7 @@ from app.services.checkin_service import (
     get_user_metric_history,
 )
 from app.services.reward_engine import compute_reward
+from app.services.gfci_engine import compute_daily_gfci
 from app.schemas.checkin_schemas import (
     TodaysQuestionsOut,
     QuestionOut,
@@ -122,7 +123,7 @@ def get_questions(
 
 
 # ──────────────────────────────────────────
-#  SUBMIT CHECK-IN ANSWERS (with Reward Loop)
+#  SUBMIT CHECK-IN ANSWERS (with Reward Loop + Real-Time GFCI)
 # ──────────────────────────────────────────
 
 @router.post("/submit")
@@ -133,7 +134,7 @@ def submit_checkin(
 ):
     """
     Accept user's check-in answers, save them, compute updated metrics,
-    and return the reward payload + canonical UserMetricsSnapshot.
+    recompute the GFCI in real-time, and return the reward payload.
 
     DATA QUALITY: Returns HTTP 409 if user already submitted today.
     """
@@ -171,6 +172,12 @@ def submit_checkin(
         new_snapshot=snapshot,
         previous_snapshot=previous_snapshot,
     )
+
+    # 4b. Recompute GFCI with fresh data — real-time index update
+    try:
+        compute_daily_gfci(db)
+    except Exception:
+        pass  # Index failure should never block a user's check-in
 
     # 5. Final commit
     db.commit()
