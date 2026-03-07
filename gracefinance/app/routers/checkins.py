@@ -261,27 +261,7 @@ def reset_today_checkin(
     }
 
 
-# ──────────────────────────────────────────
-#  DEV: RUN V5.1 SCHEMA MIGRATION
-#  TEMPORARY — remove after use
-# ──────────────────────────────────────────
 
-@router.post("/migrate-v51")
-def run_v51_migration(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    """Temporary — add v5.1 audit columns to user_metric_snapshots."""
-    cols = [
-        ("fcs_coherence", "FLOAT"),
-        ("fcs_entropy", "FLOAT"),
-        ("raw_composite_gap", "FLOAT"),
-        ("sustained_deterioration", "BOOLEAN DEFAULT FALSE"),
-    ]
-    for col_name, col_type in cols:
-        db.execute(text(f"ALTER TABLE user_metric_snapshots ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
-    db.commit()
-    return {"message": "v5.1 columns added successfully"}
 
 
 # ──────────────────────────────────────────
