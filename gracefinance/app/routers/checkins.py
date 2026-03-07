@@ -6,6 +6,7 @@ Endpoints:
   POST /checkin/submit          → Submit answers — enforces ONE check-in per user per day
   GET  /checkin/metrics         → User's FCS metric snapshots over time
   POST /checkin/reset           → Dev tool — clear today's check-in to re-test
+  POST /checkin/reset-all       → Dev tool — wipe all check-in data for current user
 
 Data quality rule:
   One check-in per user per calendar day (UTC). Enforced at the server level on
@@ -14,7 +15,7 @@ Data quality rule:
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func, and_
+from sqlalchemy import desc, func, and_, text
 from datetime import datetime, timezone, timedelta, date
 
 from app.database import get_db
@@ -258,6 +259,25 @@ def reset_today_checkin(
         "message": f"Deleted {deleted} responses from today. Check-in unlocked.",
         "date": str(datetime.now(timezone.utc).date()),
     }
+
+
+# ──────────────────────────────────────────
+#  DEV: RESET ALL DATA FOR CURRENT USER
+#  TEMPORARY — remove after use
+# ──────────────────────────────────────────
+
+@router.post("/reset-all")
+def reset_all_data(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Temporary — reset ALL check-in data, scores, and streak for current user."""
+    uid = str(user.id)
+    db.execute(text("DELETE FROM checkin_responses WHERE user_id = :uid"), {"uid": uid})
+    db.execute(text("DELETE FROM user_metric_snapshots WHERE user_id = :uid"), {"uid": uid})
+    db.execute(text("UPDATE users SET current_streak = 0, last_checkin_at = NULL WHERE id = :uid"), {"uid": uid})
+    db.commit()
+    return {"message": "All data reset for your account."}
 
 
 # ──────────────────────────────────────────
