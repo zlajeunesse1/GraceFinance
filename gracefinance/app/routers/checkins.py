@@ -6,8 +6,7 @@ Endpoints:
   POST /checkin/submit          → Submit answers — enforces ONE check-in per user per day
   GET  /checkin/metrics         → User's FCS metric snapshots over time
   POST /checkin/reset           → Dev tool — clear today's check-in to re-test
-  POST /checkin/reset-all       → Dev tool — wipe all check-in data for current user
-  POST /checkin/migrate-v5      → Dev tool — add v5 formula columns
+  POST /checkin/migrate-v51     → Dev tool — add v5.1 audit columns
 
 Data quality rule:
   One check-in per user per calendar day (UTC). Enforced at the server level on
@@ -262,10 +261,27 @@ def reset_today_checkin(
     }
 
 
+# ──────────────────────────────────────────
+#  DEV: RUN V5.1 SCHEMA MIGRATION
+#  TEMPORARY — remove after use
+# ──────────────────────────────────────────
 
-
-
-
+@router.post("/migrate-v51")
+def run_v51_migration(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Temporary — add v5.1 audit columns to user_metric_snapshots."""
+    cols = [
+        ("fcs_coherence", "FLOAT"),
+        ("fcs_entropy", "FLOAT"),
+        ("raw_composite_gap", "FLOAT"),
+        ("sustained_deterioration", "BOOLEAN DEFAULT FALSE"),
+    ]
+    for col_name, col_type in cols:
+        db.execute(text(f"ALTER TABLE user_metric_snapshots ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
+    db.commit()
+    return {"message": "v5.1 columns added successfully"}
 
 
 # ──────────────────────────────────────────

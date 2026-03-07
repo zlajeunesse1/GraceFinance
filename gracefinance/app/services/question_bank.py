@@ -1,20 +1,13 @@
 """
-Question Bank — v6.0 (Expanded for Manipulation Resistance)
-═══════════════════════════════════════════════════════════════
-CHANGES FROM v5.0:
-  - Expanded from 26 to 62 daily questions
-  - ~12 questions per dimension (was 5-6)
-  - A user seeing 5/day needs 12+ days to cycle through all questions
-  - Pattern memorization now requires 2+ weeks instead of 5-7 days
-  - New questions target behavioral specifics (dollar thresholds,
-    frequency counts, time horizons) for harder-to-fake anchoring
-
-DESIGN PRINCIPLES (unchanged):
-  1. SCALED questions dominate (1-5, 1-10)
-  2. Yes/No only for binary financial events
-  3. ZERO overlap with weekly BSI questions
-  4. Every question maps to a concrete, observable financial state
-  5. Questions worded for clarity, no ambiguity
+Question Bank — v6.1 (Full Audit: Temporal Tags + Consistency Traps)
+═════════════════════════════════════════════════════════════════════
+CHANGES FROM v6.0:
+  - Added QUESTION_TEMPORAL_SCOPE dict tagging each question as
+    "week", "month", or "general" for temporal window weighting
+  - Added consistency trap questions (CT-*): rephrased versions of
+    existing behavioral probes. If a user answers CS-1 as 5/5 but
+    CT-CS-1 as 2/5 on a different day, that's a coherence signal.
+  - Total: 72 daily questions + 5 weekly BSI + 5 consistency traps
 """
 
 import random
@@ -34,10 +27,6 @@ class CheckInQuestion:
     high_label: str = "High"
     is_weekly: bool = False
 
-
-# ══════════════════════════════════════════
-#  LOCKED DIMENSION WEIGHTS
-# ══════════════════════════════════════════
 
 FCS_WEIGHTS: Dict[str, float] = {
     "current_stability":    0.30,
@@ -84,12 +73,12 @@ DIMENSION_META: Dict[str, Dict] = {
 
 
 # ══════════════════════════════════════════════════════════════
-#  DAILY FCS QUESTIONS (62 total, ~12 per dimension)
+#  DAILY FCS QUESTIONS (62 core + 10 consistency traps = 72)
 # ══════════════════════════════════════════════════════════════
 
 DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
 
-    # ── CURRENT STABILITY (12 questions) ─────────────────────────────────────
+    # ── CURRENT STABILITY (12 + 2 traps) ─────────────────────────────────
 
     "CS-1": CheckInQuestion("CS-1",
         "How many of your bills and financial obligations are you confident you can cover this month?",
@@ -139,8 +128,17 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "How well do you know the exact amount of your fixed monthly expenses?",
         "current_stability", "1-10", 10,
         low_label="No idea", high_label="Know every dollar"),
+    # Consistency traps
+    "CT-CS-1": CheckInQuestion("CT-CS-1",
+        "If all your bills were due tomorrow, could you pay every one of them?",
+        "current_stability", "1-5", 5,
+        low_label="Definitely not", high_label="Yes, all of them"),
+    "CT-CS-2": CheckInQuestion("CT-CS-2",
+        "How much financial surprise have you dealt with this month?",
+        "current_stability", "1-5", 5,
+        low_label="Constant surprises", high_label="Nothing unexpected"),
 
-    # ── FUTURE OUTLOOK (12 questions) ────────────────────────────────────────
+    # ── FUTURE OUTLOOK (12 + 2 traps) ────────────────────────────────────
 
     "FO-1": CheckInQuestion("FO-1",
         "In the last 7 days, how much progress did you make toward a financial goal?",
@@ -190,8 +188,17 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "Compared to this time last year, is your financial situation better, the same, or worse?",
         "future_outlook", "1-5", 5,
         low_label="Much worse", high_label="Much better"),
+    # Consistency traps
+    "CT-FO-1": CheckInQuestion("CT-FO-1",
+        "Are you closer to your biggest financial goal than you were last month?",
+        "future_outlook", "1-5", 5,
+        low_label="Further away", high_label="Much closer"),
+    "CT-FO-2": CheckInQuestion("CT-FO-2",
+        "How would you describe your debt direction over the past month?",
+        "future_outlook", "1-5", 5,
+        low_label="Growing fast", high_label="Shrinking steadily"),
 
-    # ── PURCHASING POWER (12 questions) ──────────────────────────────────────
+    # ── PURCHASING POWER (12 + 2 traps) ──────────────────────────────────
 
     "PP-1": CheckInQuestion("PP-1",
         "After covering all your essential expenses, how much financial breathing room do you have right now?",
@@ -241,8 +248,17 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "How would you rate your ability to cover an unexpected car or home repair right now?",
         "purchasing_power", "1-10", 10,
         low_label="Could not cover it", high_label="Fully prepared"),
+    # Consistency traps
+    "CT-PP-1": CheckInQuestion("CT-PP-1",
+        "How tight is your budget right now after paying for essentials?",
+        "purchasing_power", "1-5", 5,
+        low_label="Extremely tight", high_label="Very comfortable"),
+    "CT-PP-2": CheckInQuestion("CT-PP-2",
+        "Have you had to borrow money or use credit for basics this week?",
+        "purchasing_power", "yes_no_scale", 5,
+        low_label="Yes", high_label="No"),
 
-    # ── EMERGENCY READINESS (13 questions) ───────────────────────────────────
+    # ── EMERGENCY READINESS (13 + 2 traps) ───────────────────────────────
 
     "ER-1": CheckInQuestion("ER-1",
         "If you lost your primary income today, how long could you cover essential expenses?",
@@ -296,8 +312,17 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "How would you rate your preparedness for a job loss or income reduction?",
         "emergency_readiness", "1-5", 5,
         low_label="Completely unprepared", high_label="Well prepared with a plan"),
+    # Consistency traps
+    "CT-ER-1": CheckInQuestion("CT-ER-1",
+        "If a $500 bill showed up today, would you need to borrow to pay it?",
+        "emergency_readiness", "yes_no_scale", 5,
+        low_label="Yes, would need to borrow", high_label="No, I have the cash"),
+    "CT-ER-2": CheckInQuestion("CT-ER-2",
+        "How many weeks could you survive financially if you stopped working today?",
+        "emergency_readiness", "1-5", 5,
+        low_label="Less than 1 week", high_label="12+ weeks"),
 
-    # ── FINANCIAL AGENCY (13 questions) ──────────────────────────────────────
+    # ── FINANCIAL AGENCY (13 + 2 traps) ──────────────────────────────────
 
     "FA-1": CheckInQuestion("FA-1",
         "How many minutes this week did you spend actively managing your finances?",
@@ -351,10 +376,55 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "How confident are you in your ability to make smart financial decisions right now?",
         "financial_agency", "1-10", 10,
         low_label="Not confident at all", high_label="Very confident"),
+    # Consistency traps
+    "CT-FA-1": CheckInQuestion("CT-FA-1",
+        "How much time did you spend reviewing your finances in the past 7 days?",
+        "financial_agency", "1-5", 5,
+        low_label="None at all", high_label="More than 30 minutes"),
+    "CT-FA-2": CheckInQuestion("CT-FA-2",
+        "Did you make any proactive financial decision this week?",
+        "financial_agency", "yes_no_scale", 5,
+        low_label="No", high_label="Yes"),
 }
 
 
 INVERTED_QUESTION_IDS = set()
+
+
+# ══════════════════════════════════════════
+#  TEMPORAL SCOPE TAGS (Audit #8)
+#  "week" = question references this week's behavior
+#  "month" = question references this month's behavior
+#  "general" = timeless or flexible reference
+# ══════════════════════════════════════════
+
+QUESTION_TEMPORAL_SCOPE: Dict[str, str] = {
+    # Stability
+    "CS-1": "month", "CS-2": "month", "CS-3": "month", "CS-4": "general",
+    "CS-5": "month", "CS-6": "week", "CS-7": "general", "CS-8": "general",
+    "CS-9": "general", "CS-10": "month", "CS-11": "week", "CS-12": "general",
+    "CT-CS-1": "general", "CT-CS-2": "month",
+    # Outlook
+    "FO-1": "week", "FO-2": "month", "FO-3": "month", "FO-4": "general",
+    "FO-5": "week", "FO-6": "general", "FO-7": "general", "FO-8": "month",
+    "FO-9": "month", "FO-10": "general", "FO-11": "general", "FO-12": "general",
+    "CT-FO-1": "month", "CT-FO-2": "month",
+    # Purchasing Power
+    "PP-1": "general", "PP-2": "week", "PP-3": "week", "PP-4": "general",
+    "PP-5": "week", "PP-6": "week", "PP-7": "month", "PP-8": "month",
+    "PP-9": "general", "PP-10": "general", "PP-11": "month", "PP-12": "general",
+    "CT-PP-1": "general", "CT-PP-2": "week",
+    # Emergency Readiness
+    "ER-1": "general", "ER-2": "general", "ER-3": "week", "ER-4": "general",
+    "ER-5": "month", "ER-6": "general", "ER-7": "general", "ER-8": "general",
+    "ER-9": "general", "ER-10": "month", "ER-11": "general", "ER-12": "general",
+    "ER-13": "general", "CT-ER-1": "general", "CT-ER-2": "general",
+    # Financial Agency
+    "FA-1": "week", "FA-2": "general", "FA-3": "week", "FA-4": "general",
+    "FA-5": "week", "FA-6": "general", "FA-7": "general", "FA-8": "month",
+    "FA-9": "general", "FA-10": "month", "FA-11": "general", "FA-12": "week",
+    "FA-13": "general", "CT-FA-1": "week", "CT-FA-2": "week",
+}
 
 
 # ══════════════════════════════════════════
@@ -386,15 +456,15 @@ WEEKLY_QUESTIONS: Dict[str, CheckInQuestion] = {
 
 
 # ══════════════════════════════════════════
-#  DIMENSION ROTATION POOLS (expanded)
+#  DIMENSION ROTATION POOLS (with traps)
 # ══════════════════════════════════════════
 
 DIMENSION_POOLS: Dict[str, List[str]] = {
-    "current_stability":   ["CS-1", "CS-2", "CS-3", "CS-4", "CS-5", "CS-6", "CS-7", "CS-8", "CS-9", "CS-10", "CS-11", "CS-12"],
-    "future_outlook":      ["FO-1", "FO-2", "FO-3", "FO-4", "FO-5", "FO-6", "FO-7", "FO-8", "FO-9", "FO-10", "FO-11", "FO-12"],
-    "purchasing_power":    ["PP-1", "PP-2", "PP-3", "PP-4", "PP-5", "PP-6", "PP-7", "PP-8", "PP-9", "PP-10", "PP-11", "PP-12"],
-    "emergency_readiness": ["ER-1", "ER-2", "ER-3", "ER-4", "ER-5", "ER-6", "ER-7", "ER-8", "ER-9", "ER-10", "ER-11", "ER-12", "ER-13"],
-    "financial_agency":    ["FA-1", "FA-2", "FA-3", "FA-4", "FA-5", "FA-6", "FA-7", "FA-8", "FA-9", "FA-10", "FA-11", "FA-12", "FA-13"],
+    "current_stability":   ["CS-1", "CS-2", "CS-3", "CS-4", "CS-5", "CS-6", "CS-7", "CS-8", "CS-9", "CS-10", "CS-11", "CS-12", "CT-CS-1", "CT-CS-2"],
+    "future_outlook":      ["FO-1", "FO-2", "FO-3", "FO-4", "FO-5", "FO-6", "FO-7", "FO-8", "FO-9", "FO-10", "FO-11", "FO-12", "CT-FO-1", "CT-FO-2"],
+    "purchasing_power":    ["PP-1", "PP-2", "PP-3", "PP-4", "PP-5", "PP-6", "PP-7", "PP-8", "PP-9", "PP-10", "PP-11", "PP-12", "CT-PP-1", "CT-PP-2"],
+    "emergency_readiness": ["ER-1", "ER-2", "ER-3", "ER-4", "ER-5", "ER-6", "ER-7", "ER-8", "ER-9", "ER-10", "ER-11", "ER-12", "ER-13", "CT-ER-1", "CT-ER-2"],
+    "financial_agency":    ["FA-1", "FA-2", "FA-3", "FA-4", "FA-5", "FA-6", "FA-7", "FA-8", "FA-9", "FA-10", "FA-11", "FA-12", "FA-13", "CT-FA-1", "CT-FA-2"],
 }
 
 
