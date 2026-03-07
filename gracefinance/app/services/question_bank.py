@@ -37,7 +37,7 @@ NORMALIZATION:
 """
 
 import random
-from datetime import date
+from datetime import date, datetime, timezone
 from dataclasses import dataclass
 from typing import List, Dict
 
@@ -104,19 +104,11 @@ DIMENSION_META: Dict[str, Dict] = {
 
 # ══════════════════════════════════════════════════════════════
 #  DAILY FCS QUESTIONS — BEHAVIORAL PROFILE BUILDERS
-#
-#  Design: Each question captures a financial STATE that,
-#  when tracked over time, becomes a predictive signal.
-#
-#  Scale preference: 1-5 and 1-10 for richer data.
-#  Yes/No only for hard binary events.
 # ══════════════════════════════════════════════════════════════
 
 DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
 
     # ── CURRENT STABILITY (30%) ─────────────────────────────────────────────
-    # Profile signals: bill coverage, income reliability, account health,
-    #                  expense predictability, financial order
 
     "CS-1": CheckInQuestion(
         "CS-1",
@@ -138,7 +130,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "current_stability", "1-5", 5,
         low_label="Constantly",
         high_label="Never",
-        # NOTE: naturally inverted — "constantly" = bad = low score
     ),
     "CS-4": CheckInQuestion(
         "CS-4",
@@ -163,8 +154,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
     ),
 
     # ── FUTURE OUTLOOK (25%) ────────────────────────────────────────────────
-    # Profile signals: saving trajectory, debt direction, goal progress,
-    #                  income growth actions, financial momentum
 
     "FO-1": CheckInQuestion(
         "FO-1",
@@ -203,8 +192,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
     ),
 
     # ── PURCHASING POWER (20%) ───────────────────────────────────────────────
-    # Profile signals: spending capacity, cost pressure, lifestyle maintenance,
-    #                  real purchasing strength, borrowing dependency
 
     "PP-1": CheckInQuestion(
         "PP-1",
@@ -219,7 +206,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "purchasing_power", "1-5", 5,
         low_label="5+ times — constantly downgrading",
         high_label="Never — buying what I need",
-        # Naturally inverted — frequent downgrading = low purchasing power
     ),
     "PP-3": CheckInQuestion(
         "PP-3",
@@ -244,8 +230,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
     ),
 
     # ── EMERGENCY READINESS (15%) ────────────────────────────────────────────
-    # Profile signals: cushion depth, shock absorption capacity, liquidity,
-    #                  safety net building behavior
 
     "ER-1": CheckInQuestion(
         "ER-1",
@@ -284,8 +268,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
     ),
 
     # ── FINANCIAL AGENCY (10%) ───────────────────────────────────────────────
-    # Profile signals: engagement level, proactive management, financial literacy
-    #                  actions, automation, planning behavior
 
     "FA-1": CheckInQuestion(
         "FA-1",
@@ -326,20 +308,11 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
 
 
 # ── INVERTED QUESTIONS ───────────────────────────────────────────────────────
-# None needed in v5. All questions are phrased so that higher raw = better.
-# The scale labels handle the framing naturally.
-# CS-3 and PP-2 use labels where low_label = bad, high_label = good,
-# so "1" = "Constantly" disrupted and "5" = "Never" disrupted — no inversion.
 INVERTED_QUESTION_IDS = set()
 
 
 # ══════════════════════════════════════════
 #  WEEKLY BEHAVIORAL CROSSOVER (BSI)
-#  Runs on Sundays. Feeds BSI score only — not FCS.
-#
-#  ZERO OVERLAP with daily questions.
-#  These measure BEHAVIORAL SHIFTS — changes in spending
-#  patterns that signal macro stress or expansion.
 # ══════════════════════════════════════════
 
 WEEKLY_QUESTIONS: Dict[str, CheckInQuestion] = {
@@ -398,6 +371,11 @@ DIMENSION_POOLS: Dict[str, List[str]] = {
 #  PUBLIC API
 # ══════════════════════════════════════════
 
+def _utc_today() -> date:
+    """Single source of truth for 'today' — always UTC."""
+    return datetime.now(timezone.utc).date()
+
+
 def get_daily_questions(
     user_id, target_date: date = None, count: int = 5
 ) -> List[CheckInQuestion]:
@@ -408,7 +386,7 @@ def get_daily_questions(
     but different questions each day.
     """
     if target_date is None:
-        target_date = date.today()
+        target_date = _utc_today()
 
     seed = hash(f"{user_id}:{target_date.isoformat()}")
     rng = random.Random(seed)
@@ -432,13 +410,13 @@ def get_weekly_questions() -> List[CheckInQuestion]:
 
 def is_weekly_checkin_day(target_date: date = None) -> bool:
     if target_date is None:
-        target_date = date.today()
+        target_date = _utc_today()
     return target_date.weekday() == 6  # Sunday
 
 
 def get_todays_questions(user_id, target_date: date = None) -> dict:
     if target_date is None:
-        target_date = date.today()
+        target_date = _utc_today()
 
     daily = get_daily_questions(user_id, target_date)
     result = {

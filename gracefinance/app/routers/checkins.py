@@ -42,20 +42,30 @@ from app.routers.me import _build_snapshot
 router = APIRouter(prefix="/checkin", tags=["Check-In"])
 
 
-# ── Internal helper ────────────────────────────────────────────────────────────
+# ── Internal helpers ───────────────────────────────────────────────────────────
+
+def _utc_today_bounds():
+    """Return (today_start, tomorrow_start) as UTC-aware datetimes."""
+    now_utc = datetime.now(timezone.utc)
+    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow_start = today_start + timedelta(days=1)
+    return today_start, tomorrow_start
+
 
 def _has_checked_in_today(db: Session, user_id) -> bool:
     """
     Returns True if the user has ANY check-in response recorded today (UTC).
-    Single source of truth for the one-per-day rule.
+    Uses explicit UTC boundaries — no timezone ambiguity.
     """
-    today_utc = date.today()
+    today_start, tomorrow_start = _utc_today_bounds()
+
     count = (
         db.query(func.count(CheckInResponse.id))
         .filter(
             and_(
                 CheckInResponse.user_id == user_id,
-                func.date(CheckInResponse.checkin_date) == today_utc,
+                CheckInResponse.checkin_date >= today_start,
+                CheckInResponse.checkin_date < tomorrow_start,
             )
         )
         .scalar() or 0
@@ -78,16 +88,18 @@ def get_questions(
     Sundays: also includes 5 weekly BSI questions.
     Returns empty lists + already_completed=True if user already checked in today.
     """
+    today_utc = datetime.now(timezone.utc).date()
+
     if _has_checked_in_today(db, user.id):
         return TodaysQuestionsOut(
-            date=str(date.today()),
+            date=str(today_utc),
             daily_questions=[],
             weekly_questions=[],
             is_weekly_day=False,
             already_completed=True,
         )
 
-    result = get_todays_questions(user.id)
+    result = get_todays_questions(user.id, today_utc)
 
     return TodaysQuestionsOut(
         date=result["date"],
@@ -226,14 +238,15 @@ def reset_today_checkin(
     Allows re-testing the check-in flow without waiting for the next day.
     Only deletes the authenticated user's data — no other users affected.
     """
-    today_utc = date.today()
+    today_start, tomorrow_start = _utc_today_bounds()
 
     deleted = (
         db.query(CheckInResponse)
         .filter(
             and_(
                 CheckInResponse.user_id == user.id,
-                func.date(CheckInResponse.checkin_date) == today_utc,
+                CheckInResponse.checkin_date >= today_start,
+                CheckInResponse.checkin_date < tomorrow_start,
             )
         )
         .delete(synchronize_session="fetch")
@@ -243,7 +256,7 @@ def reset_today_checkin(
 
     return {
         "message": f"Deleted {deleted} responses from today. Check-in unlocked.",
-        "date": str(today_utc),
+        "date": str(datetime.now(timezone.utc).date()),
     }
 
 
