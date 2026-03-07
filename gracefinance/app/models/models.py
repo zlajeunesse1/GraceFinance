@@ -80,6 +80,10 @@ class User(Base):
     stripe_customer_id = Column(String(255), nullable=True)
     stripe_subscription_id = Column(String(255), nullable=True)
 
+    # ── Streak & Check-in Tracking ──
+    current_streak = Column(Integer, default=0, nullable=False, server_default="0")
+    last_checkin_date = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_checkin_at = Column(DateTime(timezone=True), nullable=True)
