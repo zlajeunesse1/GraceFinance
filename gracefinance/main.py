@@ -100,7 +100,7 @@ app.include_router(me_router)
 app.include_router(feed_router)
 
 # ── Migration (temporary — remove after running) ──
-app.include_router(migrate_router)
+
 
 # ── Legal Pages ──
 app.include_router(legal_router)
