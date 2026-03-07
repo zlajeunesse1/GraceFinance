@@ -28,7 +28,7 @@ function apiFetch(endpoint, options) {
   return fetch(API_BASE + endpoint, config).then(function (res) { if (!res.ok) throw new Error("Failed to fetch " + endpoint); return res.json() })
 }
 
-var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#666666", dim: "#444444", faint: "#333333" }
+var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#9ca3af", dim: "#6b7280", faint: "#4b5563" }
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
 
 var dimensionLabels = { current_stability: "Stability", future_outlook: "Outlook", purchasing_power: "Purchasing Power", emergency_readiness: "Emergency Readiness", financial_agency: "Financial Agency" }
@@ -262,7 +262,6 @@ export default function DashboardPage() {
   var checkinCount = s ? s.checkins_this_week : null; var streak = s ? s.streak_count : null
   var dims = s && s.dimensions ? s.dimensions : {}
 
-  // Backend returns 0.0-1.0 floats. Pass directly — DimensionBreakdown handles ×100.
   var currentMetrics = {
     current_stability: dims.stability != null ? dims.stability : null,
     future_outlook: dims.outlook != null ? dims.outlook : null,
@@ -285,8 +284,6 @@ export default function DashboardPage() {
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT }}>
       <style>{"@import url('https://fonts.cdnfonts.com/css/geist');"}</style>
       <div style={{ maxWidth: 960, margin: "0 auto", padding: pad }}>
-
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, opacity: mounted ? 1 : 0, transition: "opacity 0.5s ease" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 28, height: 28, border: "1.5px solid " + C.text, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>G</div>
@@ -300,22 +297,16 @@ export default function DashboardPage() {
             >Sign out</button>
           </div>
         </div>
-
         <p style={{ fontSize: 12, color: C.dim, margin: "0 0 " + (screen.isMobile ? "12px" : "20px"), letterSpacing: "0.02em" }}>{dateStr}</p>
         <Nav navigate={navigate} active="dashboard" isMobile={screen.isMobile} />
-
         <div style={{ marginBottom: gap }}><DailyCheckin onCheckinComplete={handleCheckinComplete} /></div>
         <div style={{ marginBottom: gap }}><QuickStats score={currentFCS} checkinCount={checkinCount} streak={streak} isMobile={screen.isMobile} /></div>
-
-        {/* Score + Dimensions */}
         <div style={{ display: "grid", gridTemplateColumns: screen.isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: gap }}>
           <FCSScore score={currentFCS} trend={fcsTrend} checkinCount={checkinCount} isMobile={screen.isMobile} />
           <DimensionBreakdown metrics={currentMetrics} />
         </div>
-
         <div style={{ marginBottom: gap }}><TrendChart snapshots={snapshots} /></div>
         <div style={{ marginBottom: 40 }}><GraceAICard navigate={navigate} score={currentFCS} weakestDim={weakestDim} isMobile={screen.isMobile} /></div>
-
         <div style={{ borderTop: "1px solid " + C.border, paddingTop: 20, textAlign: "center" }}>
           <p style={{ color: C.dim, fontSize: 11, margin: 0, letterSpacing: "0.02em" }}>GraceFinance. Where Financial Confidence Is Measured.</p>
         </div>

@@ -7,7 +7,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useProfile } from "../hooks/useProfile"
 
-var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#666666", dim: "#444444", faint: "#333333" }
+var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#9ca3af", dim: "#6b7280", faint: "#4b5563" }
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
 
 function Toggle(props) {
@@ -43,7 +43,6 @@ export default function SettingsPage() {
           <p style={{ fontSize: 13, color: C.dim, margin: 0 }}>Customize your GraceFinance experience.</p>
         </div>
 
-        {/* Notifications */}
         <div style={cardStyle}>
           <div style={sectionLabel}>Notifications</div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid " + C.border }}>
@@ -56,13 +55,12 @@ export default function SettingsPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
             <div>
               <span style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>Index contribution</span>
-              <p style={{ fontSize: 12, color: C.dim, margin: "4px 0 0" }}>Your anonymized data helps power the GFCI — a real financial confidence indicator.</p>
+              <p style={{ fontSize: 12, color: C.dim, margin: "4px 0 0" }}>Your anonymized data helps power the GraceFinance Composite Index, a real-time financial confidence indicator.</p>
             </div>
             <Toggle active={indexOptIn} onToggle={function () { setIndexOptIn(!indexOptIn) }} />
           </div>
         </div>
 
-        {/* Data & Export */}
         <div style={cardStyle}>
           <div style={sectionLabel}>Your Data</div>
           <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, margin: "0 0 16px" }}>
@@ -78,7 +76,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Danger Zone */}
         <div style={cardStyle}>
           <div style={sectionLabel}>Account</div>
           <button style={{ padding: "12px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer", background: "transparent", textAlign: "left", border: "1px solid #331111", color: "#ff4444", transition: "all 0.2s", width: "100%" }}>

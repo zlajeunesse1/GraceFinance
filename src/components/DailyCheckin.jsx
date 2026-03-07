@@ -11,7 +11,7 @@ var API_BASE = window.location.hostname === 'localhost'
   : 'https://gracefinance-production.up.railway.app'
 
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
-var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#666666", dim: "#444444", faint: "#333333", error: "#ff4444" }
+var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#9ca3af", dim: "#6b7280", faint: "#4b5563", error: "#ff4444" }
 
 function authHeaders() { return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('grace_token') } }
 
@@ -106,7 +106,7 @@ export default function DailyCheckin(props) {
         {result && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: m ? 28 : 40, marginBottom: 24 }}>
             <div>
-              <div style={{ fontSize: m ? 28 : 36, fontWeight: 300, color: C.text, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>{fcsScore != null ? fcsScore.toFixed(1) : '—'}</div>
+              <div style={{ fontSize: m ? 28 : 36, fontWeight: 300, color: C.text, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>{fcsScore != null ? fcsScore.toFixed(1) : '...'}</div>
               <div style={{ fontSize: 11, color: C.dim, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Your FCS</div>
             </div>
             <div>
@@ -121,7 +121,7 @@ export default function DailyCheckin(props) {
               <div style={{ height: '100%', borderRadius: 2, width: Math.min(fcsScore, 100) + '%', background: C.text, transition: 'width 1s ease' }} />
             </div>
             <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-              {fcsScore >= 70 ? "Strong confidence. You're in a great position — keep going." : fcsScore >= 40 ? "Building momentum. Every check-in sharpens the picture." : "Awareness is the foundation. You're doing the right thing by showing up."}
+              {fcsScore >= 70 ? "Strong confidence. You're in a great position, keep going." : fcsScore >= 40 ? "Building momentum. Every check-in sharpens the picture." : "Awareness is the foundation. You're doing the right thing by showing up."}
             </p>
           </div>
         )}
@@ -190,7 +190,6 @@ export default function DailyCheckin(props) {
             <span style={{ fontSize: 11, color: C.dim }}>{labels.low}</span><span style={{ fontSize: 11, color: C.dim }}>{labels.high}</span>
           </div>
           {m ? (
-            /* Mobile: 2 rows of 5 */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', gap: 6 }}>
                 {[1, 2, 3, 4, 5].map(function (num) {
@@ -216,7 +215,6 @@ export default function DailyCheckin(props) {
               </div>
             </div>
           ) : (
-            /* Desktop: single row */
             <div style={{ display: 'flex', gap: 4 }}>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (num) {
                 var isSelected = answers[currentQuestion.question_id] === num

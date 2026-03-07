@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import { useProfile } from "../hooks/useProfile"
 
-var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#666666", dim: "#444444", faint: "#333333" }
+var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#9ca3af", dim: "#6b7280", faint: "#4b5563" }
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
 
 var RISK_OPTIONS = [
@@ -51,7 +51,7 @@ export default function ProfilePage() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT, display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 24px" }}>
-      <style>{"@import url('https://fonts.cdnfonts.com/css/geist');::placeholder { color: #444444 !important; }input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #000000 inset !important; -webkit-text-fill-color: #ffffff !important; }"}</style>
+      <style>{"@import url('https://fonts.cdnfonts.com/css/geist');::placeholder { color: #6b7280 !important; }input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #000000 inset !important; -webkit-text-fill-color: #ffffff !important; }"}</style>
       <div style={{ width: "100%", maxWidth: 560 }}>
         <button onClick={function () { navigate("/dashboard") }} style={{ background: "transparent", border: "1px solid " + C.border, borderRadius: 6, padding: "8px 16px", color: C.dim, fontSize: 12, fontFamily: FONT, cursor: "pointer", marginBottom: 32, transition: "all 0.2s" }}
           onMouseEnter={function (e) { e.target.style.color = C.text; e.target.style.borderColor = C.faint }}
@@ -66,9 +66,9 @@ export default function ProfilePage() {
         <div style={cardStyle}>
           <div style={sectionLabel}>Account</div>
           {[
-            { label: "Name", value: user ? ((user.first_name || "") + " " + (user.last_name || "")).trim() || "—" : "—" },
-            { label: "Email", value: user ? user.email : "—" },
-            { label: "Member since", value: user && user.created_at ? new Date(user.created_at).toLocaleDateString() : "—" },
+            { label: "Name", value: user ? ((user.first_name || "") + " " + (user.last_name || "")).trim() || "..." : "..." },
+            { label: "Email", value: user ? user.email : "..." },
+            { label: "Member since", value: user && user.created_at ? new Date(user.created_at).toLocaleDateString() : "..." },
             { label: "Plan", value: "Free" },
           ].map(function (item, i, arr) {
             return (<div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: i < arr.length - 1 ? "1px solid " + C.border : "none" }}>

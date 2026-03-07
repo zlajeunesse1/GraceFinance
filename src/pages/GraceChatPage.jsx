@@ -15,11 +15,11 @@ export default function GraceChatPage() {
 
       <div style={{ width: '100%', maxWidth: 700, padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #141414', paddingBottom: 16 }}>
         <button onClick={function () { navigate('/dashboard') }} style={{
-          background: 'transparent', border: '1px solid #222222', borderRadius: 6, padding: '8px 16px', color: '#666666',
+          background: 'transparent', border: '1px solid #222222', borderRadius: 6, padding: '8px 16px', color: '#9ca3af',
           fontSize: 13, fontWeight: 500, fontFamily: "'Geist', 'SF Pro Display', -apple-system, sans-serif", cursor: 'pointer', transition: 'all 0.2s ease', letterSpacing: '0.01em',
         }}
-          onMouseEnter={function (e) { e.target.style.borderColor = '#444444'; e.target.style.color = '#ffffff' }}
-          onMouseLeave={function (e) { e.target.style.borderColor = '#222222'; e.target.style.color = '#666666' }}
+          onMouseEnter={function (e) { e.target.style.borderColor = '#4b5563'; e.target.style.color = '#ffffff' }}
+          onMouseLeave={function (e) { e.target.style.borderColor = '#222222'; e.target.style.color = '#9ca3af' }}
         >Dashboard</button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -28,7 +28,7 @@ export default function GraceChatPage() {
               <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff', letterSpacing: '-0.02em' }}>Grace</span>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ffffff' }} />
             </div>
-            <span style={{ fontSize: 11, color: '#444444', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Your Behavioral Coach</span>
+            <span style={{ fontSize: 11, color: '#6b7280', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Your Behavioral Coach</span>
           </div>
         </div>
       </div>
@@ -38,7 +38,7 @@ export default function GraceChatPage() {
       </div>
 
       <div style={{ width: '100%', maxWidth: 700, padding: '0 20px 16px', textAlign: 'center' }}>
-        <p style={{ fontSize: 11, color: '#333333', margin: 0, letterSpacing: '0.02em' }}>
+        <p style={{ fontSize: 11, color: '#4b5563', margin: 0, letterSpacing: '0.02em' }}>
           Grace helps you understand your financial behavior. For financial decisions, always consult a licensed professional.
         </p>
       </div>

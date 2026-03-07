@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef } from "react"
 
-var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#666666", dim: "#444444", faint: "#333333" }
+var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#9ca3af", dim: "#6b7280", faint: "#4b5563" }
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
 var STEPS = ["welcome", "goals", "financials", "mission", "snapshot"]
 
@@ -70,7 +70,7 @@ export default function OnboardingPage(props) {
 
   return (
     <div style={{ minHeight: "100vh", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: FONT, position: "relative", padding: "60px 24px", boxSizing: "border-box", background: C.bg, color: C.text }}>
-      <style>{"@import url('https://fonts.cdnfonts.com/css/geist');::placeholder { color: #444444 !important; }"}</style>
+      <style>{"@import url('https://fonts.cdnfonts.com/css/geist');::placeholder { color: #6b7280 !important; }"}</style>
 
       {step !== "snapshot" && step !== "welcome" && (
         <div style={{ position: "fixed", top: 24, right: 28, zIndex: 50 }}>
@@ -90,13 +90,13 @@ export default function OnboardingPage(props) {
               Meet your<br /><span style={{ fontWeight: 600 }}>Financial Confidence Score.</span>
             </h1>
             <p style={{ fontSize: 15, color: C.dim, lineHeight: 1.7, margin: "0 0 12px", maxWidth: 380, marginLeft: "auto", marginRight: "auto" }}>
-              The FCS measures your real relationship with money — not your credit, not your net worth, but how confident you are in your financial life. It's built from your daily check-ins and gets smarter every time you show up.
+              The FCS measures your real relationship with money. Not your credit, not your net worth, but how confident you are in your financial life. It's built from your daily check-ins and gets smarter every time you show up.
             </p>
             <p style={{ fontSize: 13, color: C.faint, lineHeight: 1.6, margin: "0 0 44px", maxWidth: 380, marginLeft: "auto", marginRight: "auto" }}>
-              Your anonymized behavioral data also powers the GFCI — a real-time financial confidence indicator for the population.
+              Your anonymized behavioral data also powers the GraceFinance Composite Index, a real-time financial confidence indicator for the population.
             </p>
             <button onClick={function () { goNext("goals") }} style={btnStyle} onMouseEnter={function (e) { e.target.style.opacity = "0.85" }} onMouseLeave={function (e) { e.target.style.opacity = "1" }}>Build My Profile</button>
-            <p style={{ fontSize: 11, color: C.faint, marginTop: 20, letterSpacing: "0.02em" }}>Free forever · Your data stays yours · Takes 60 seconds</p>
+            <p style={{ fontSize: 11, color: C.faint, marginTop: 20, letterSpacing: "0.02em" }}>Free forever. Your data stays yours. Takes 60 seconds.</p>
           </div>
         )}
 
@@ -124,7 +124,7 @@ export default function OnboardingPage(props) {
           <div style={{ width: "100%" }}>
             <div style={labelStyle}>Step 2 of 4</div>
             <h2 style={headingStyle}>Your <span style={{ fontWeight: 600 }}>monthly snapshot.</span></h2>
-            <p style={subStyle}>This calibrates your Financial Confidence Score. Estimates are perfectly fine — the picture sharpens with every check-in.</p>
+            <p style={subStyle}>This calibrates your Financial Confidence Score. Estimates are perfectly fine. The picture sharpens with every check-in.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 32, marginBottom: 40 }}>
               <div><label style={labelStyle}>Monthly income (after tax)</label><CurrencyInput value={income} onChange={setIncome} placeholder="4,500" autoFocus /></div>
               <div><label style={labelStyle}>Monthly expenses</label><CurrencyInput value={expenses} onChange={setExpenses} placeholder="3,200" /></div>
@@ -187,8 +187,8 @@ export default function OnboardingPage(props) {
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {[
                   "Daily check-ins build your Financial Confidence Score across five behavioral dimensions.",
-                  "Grace AI coaches you based on patterns in your data — not generic advice.",
-                  "Your anonymized profile contributes to the GFCI — a population-level confidence indicator.",
+                  "Grace AI coaches you based on patterns in your data, not generic advice.",
+                  "Your anonymized profile contributes to the GraceFinance Composite Index, a population-level confidence indicator.",
                 ].map(function (item, i) {
                   return (<div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                     <span style={{ fontSize: 12, color: C.faint, fontWeight: 500, fontVariantNumeric: "tabular-nums", flexShrink: 0, width: 18, textAlign: "right" }}>{(i + 1) + "."}</span>

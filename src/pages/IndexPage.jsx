@@ -1,7 +1,7 @@
 /**
  * IndexPage — v5 Polish
  *
- * GFCI positioned as a premium financial confidence indicator.
+ * GraceFinance Composite Index positioned as a premium financial confidence indicator.
  * Paywall-ready structure. Real-time data display.
  * Hidden dev compute trigger (triple-click the label).
  */
@@ -16,7 +16,7 @@ import {
 
 var C = {
   bg: "#000000", card: "#0a0a0a", border: "#1a1a1a",
-  text: "#ffffff", muted: "#666666", dim: "#444444", faint: "#333333",
+  text: "#ffffff", muted: "#9ca3af", dim: "#6b7280", faint: "#4b5563",
 }
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
 
@@ -82,10 +82,10 @@ function getTrendLabel(direction) {
 }
 
 function getIndexHealthLabel(value) {
-  if (value >= 75) return "Population confidence is high — financial behavior is stable and forward-looking."
-  if (value >= 60) return "Confidence is solid — most users are managing their finances with intention."
-  if (value >= 45) return "Mixed signals — some users are building, others are under pressure."
-  if (value >= 30) return "Confidence is stressed — behavioral indicators show increasing caution."
+  if (value >= 75) return "Population confidence is high. Financial behavior is stable and forward-looking."
+  if (value >= 60) return "Confidence is solid. Most users are managing their finances with intention."
+  if (value >= 45) return "Mixed signals. Some users are building, others are under pressure."
+  if (value >= 30) return "Confidence is stressed. Behavioral indicators show increasing caution."
   return "Elevated financial stress across the population."
 }
 
@@ -115,7 +115,6 @@ export default function IndexPage() {
     apiFetch("/index/methodology").then(function (data) { setMethodology(data); setShowMethod(true) }).catch(function () {})
   }
 
-  /* Hidden dev trigger — triple-click the GFCI label to compute */
   var clickCountState = useState(0); var clickCount = clickCountState[0]; var setClickCount = clickCountState[1]
   function handleLabelClick() {
     var newCount = clickCount + 1
@@ -155,7 +154,6 @@ export default function IndexPage() {
       <style>{"@import url('https://fonts.cdnfonts.com/css/geist');"}</style>
       <div style={{ maxWidth: 800, margin: "0 auto", padding: "24px 24px 60px" }}>
 
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, opacity: mounted ? 1 : 0, transition: "opacity 0.5s ease" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 28, height: 28, border: "1.5px solid " + C.text, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>G</div>
@@ -170,18 +168,18 @@ export default function IndexPage() {
           >Sign out</button>
         </div>
 
-        <p style={{ fontSize: 12, color: C.dim, margin: "0 0 20px", letterSpacing: "0.02em" }}>The Financial Confidence Indicator</p>
+        <p style={{ fontSize: 12, color: C.dim, margin: "0 0 20px", letterSpacing: "0.02em" }}>The GraceFinance Composite Index</p>
         <Nav navigate={navigate} active="index" />
 
-        {/* ── HERO ── */}
+        {/* HERO */}
         <Card style={{ marginBottom: 16, padding: "36px 28px" }}>
           <div onClick={handleLabelClick} style={{ cursor: "default" }}>
-            <Label>GFCI — Grace Financial Confidence Index</Label>
+            <Label>GraceFinance Composite Index</Label>
           </div>
 
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginTop: 20, marginBottom: 8 }}>
             <span style={{ fontSize: 64, fontWeight: 200, letterSpacing: "-0.04em", color: C.text, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
-              {gfci != null ? gfci.toFixed(1) : "—"}
+              {gfci != null ? gfci.toFixed(1) : "..."}
             </span>
             <span style={{ fontSize: 16, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
               {hasData ? getTrendLabel(trend) : ""}
@@ -196,11 +194,10 @@ export default function IndexPage() {
 
           {!hasData && (
             <p style={{ fontSize: 13, color: C.dim, margin: "0 0 24px", lineHeight: 1.7 }}>
-              The GFCI aggregates Financial Confidence Scores across all users into a single real-time indicator. As more people check in, this number becomes a window into how the population really feels about money.
+              The GraceFinance Composite Index aggregates Financial Confidence Scores across all users into a single real-time indicator. As more people check in, this number becomes a window into how the population really feels about money.
             </p>
           )}
 
-          {/* Sub-metrics */}
           {hasData && (
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               {[
@@ -210,7 +207,7 @@ export default function IndexPage() {
                 { label: "7d Trend", value: slope7d, decimals: 3, showSign: true },
                 { label: "Volatility", value: volatility, decimals: 3 },
               ].map(function (item) {
-                var display = "—"
+                var display = "..."
                 if (item.value != null) {
                   var formatted = item.decimals > 0 ? item.value.toFixed(item.decimals) : String(item.value)
                   if (item.showSign && item.value > 0) formatted = "+" + formatted
@@ -232,7 +229,7 @@ export default function IndexPage() {
           </div>
         </Card>
 
-        {/* ── TREND CHART ── */}
+        {/* TREND CHART */}
         {chartData.length > 1 ? (
           <Card style={{ marginBottom: 16, padding: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -258,7 +255,7 @@ export default function IndexPage() {
                 <Tooltip contentStyle={{ background: "#111111", border: "1px solid " + C.border, borderRadius: 8, padding: "8px 12px", fontFamily: FONT }}
                   labelStyle={{ color: C.muted, fontSize: 11 }} itemStyle={{ color: C.text, fontSize: 13, fontWeight: 600 }}
                   labelFormatter={function (d) { return new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) }}
-                  formatter={function (val) { return [val.toFixed(1), "GFCI"] }} />
+                  formatter={function (val) { return [val.toFixed(1), "Composite Index"] }} />
                 {chartAvg && <ReferenceLine y={chartAvg} stroke={C.faint} strokeDasharray="4 4" />}
                 <Area type="monotone" dataKey="gfci" stroke="#ffffff" strokeWidth={1.5} fill="url(#gfciGrad)"
                   dot={{ r: 2, fill: "#ffffff", stroke: C.bg, strokeWidth: 2 }}
@@ -272,24 +269,24 @@ export default function IndexPage() {
             <p style={{ fontSize: 13, color: C.dim, margin: "16px 0 0", lineHeight: 1.7 }}>
               {hasData
                 ? "The trend chart will appear after two or more index computations. Each day adds a new data point."
-                : "As users complete daily check-ins, the GFCI builds a trend line showing how financial confidence moves over time — like watching a market indicator, but for how people actually feel about money."
+                : "As users complete daily check-ins, the Composite Index builds a trend line showing how financial confidence moves over time. Like watching a market indicator, but for how people actually feel about money."
               }
             </p>
           </Card>
         )}
 
-        {/* ── WHAT IS THE GFCI ── */}
+        {/* WHAT IS THE COMPOSITE INDEX */}
         <Card style={{ marginBottom: 16 }}>
-          <Label>What is the GFCI?</Label>
+          <Label>What is the Composite Index?</Label>
           <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.8, margin: "16px 0 0" }}>
-            The Grace Financial Confidence Index is a real-time behavioral indicator that measures how financially confident the population is — based on actual financial behaviors, not surveys or opinions.
+            The GraceFinance Composite Index is a macro-level signal that reflects aggregate financial confidence across the platform's user base. Individual FCS scores are stripped of all personally identifiable information, aggregated with all other user scores, and processed into a single composite metric.
           </p>
           <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, margin: "12px 0 0" }}>
-            Traditional indicators like the Consumer Confidence Index ask people how they feel. The GFCI measures what people do — whether they're paying bills on time, building savings, managing debt, or pulling back on spending. Every daily check-in from every user contributes an anonymized signal. The result is a financial confidence reading as close to real-time as it gets.
+            Traditional indicators like the Consumer Confidence Index ask people how they feel. The Composite Index measures what people do: whether they're paying bills on time, building savings, managing debt, or pulling back on spending. Every daily check-in from every user contributes an anonymized signal. The result is a financial confidence reading as close to real-time as it gets.
           </p>
         </Card>
 
-        {/* ── METHODOLOGY ── */}
+        {/* METHODOLOGY */}
         <Card style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={loadMethodology}>
             <Label>Methodology</Label>
@@ -299,7 +296,7 @@ export default function IndexPage() {
           {showMethod && methodology && (
             <div style={{ marginTop: 16 }}>
               <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.7, margin: "0 0 16px" }}>{methodology.description}</p>
-              <div style={{ fontSize: 12, color: C.dim, marginBottom: 8 }}>Version {methodology.version} — Computed {methodology.computation_schedule}</div>
+              <div style={{ fontSize: 12, color: C.dim, marginBottom: 8 }}>Version {methodology.version}. Computed {methodology.computation_schedule}</div>
 
               {methodology.scoring_engine && (
                 <div style={{ marginTop: 12 }}>
@@ -326,17 +323,16 @@ export default function IndexPage() {
           )}
         </Card>
 
-        {/* ── PRIVACY ── */}
+        {/* PRIVACY */}
         <Card style={{ marginBottom: 16, padding: "16px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 500, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Privacy & Data</div>
+          <div style={{ fontSize: 11, fontWeight: 500, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Privacy and Data</div>
           <p style={{ fontSize: 12, color: C.faint, lineHeight: 1.7, margin: 0 }}>
-            The GFCI is built from anonymized behavioral data. No individual user can be identified from the index. Your Financial Confidence Score is visible only to you. The index reflects collective patterns — never individual behavior.
+            The Composite Index is built from anonymized behavioral data. No individual user can be identified from the index. Your Financial Confidence Score is visible only to you. The index reflects collective patterns, never individual behavior.
           </p>
         </Card>
 
-        {/* Footer */}
         <div style={{ borderTop: "1px solid " + C.border, paddingTop: 20, textAlign: "center", marginTop: 32 }}>
-          <p style={{ color: C.dim, fontSize: 11, margin: 0, letterSpacing: "0.02em" }}>GraceFinance — Where Financial Confidence Is Measured</p>
+          <p style={{ color: C.dim, fontSize: 11, margin: 0, letterSpacing: "0.02em" }}>GraceFinance. Where Financial Confidence Is Measured.</p>
         </div>
       </div>
     </div>
