@@ -51,16 +51,49 @@ export const authApi = {
     })
   },
 
+  // ─── Get Current User (validates token) ────────────────────
+  async getMe() {
+    return apiFetch('/me')
+  },
+
+  // ─── Complete Onboarding ──────────────────────────────────
+  // Saves income, expenses, mission, and goal categories to the DB.
+  // Grace AI reads all of this on every conversation after this point.
+  // Called by AuthContext.completeOnboarding() at end of OnboardingPage.
+  async completeOnboarding(payload) {
+    // payload: { monthly_income, monthly_expenses, financial_goal, onboarding_goals }
+    return apiFetch('/onboarding', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  // ─── Update Income (from Settings page) ──────────────────
+  // Allows users to update their income/expenses after onboarding.
+  // Grace AI picks up the new numbers on the next conversation.
+  async updateIncome(payload) {
+    // payload: { monthly_income?, monthly_expenses? }
+    return apiFetch('/income', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+
   // ─── Forgot Password ─────────────────────────────────────
+  // Always returns 200 — backend never reveals if email exists.
   async forgotPassword(email) {
-    return apiFetch('/forgot', {
+    return apiFetch('/forgot-password', {   // fixed: was '/forgot' (404)
       method: 'POST',
       body: JSON.stringify({ email }),
     })
   },
 
-  // ─── Get Current User (validates token) ────────────────────
-  async getMe() {
-    return apiFetch('/me')
+  // ─── Reset Password ───────────────────────────────────────
+  // Called from the reset-password page with token from email link.
+  async resetPassword(token, newPassword) {
+    return apiFetch('/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, new_password: newPassword }),
+    })
   },
 }

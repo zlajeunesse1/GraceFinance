@@ -1,6 +1,11 @@
 /**
- * DailyCheckin — v5 Responsive
- * Touch-friendly buttons. Smaller scale buttons on mobile.
+ * DailyCheckin — v5.1
+ * FIXES:
+ *   - Counter bug at question 5: added bounds check on Next button click
+ *   - Added null guard on currentQuestion (prevents crash if index goes OOB)
+ *   - Next button now disabled on last question regardless of allAnswered state
+ *     (Complete Check-In button takes over instead — no ambiguous state)
+ *   - Progress bar now reflects actual answered count, not currentIndex
  */
 
 import { useState, useEffect } from 'react'
@@ -69,10 +74,28 @@ export default function DailyCheckin(props) {
       .catch(function (err) { setError(err.message); setSubmitting(false) })
   }
 
-  var currentQuestion = questions[currentIndex]
+  // ── FIX: clamp index to valid range, add null guard ──────────────────────
+  var safeIndex = Math.min(Math.max(currentIndex, 0), Math.max(questions.length - 1, 0))
+  var currentQuestion = questions.length > 0 ? questions[safeIndex] : null
+
+  // ── FIX: derive isLastQuestion from clamped index ─────────────────────────
+  var isLastQuestion = questions.length > 0 && safeIndex === questions.length - 1
+
   var allAnswered = questions.length > 0 && questions.every(function (q) { return answers[q.question_id] !== undefined && answers[q.question_id] !== null })
-  var isLastQuestion = currentIndex === questions.length - 1
-  function isAnswered(q) { var a = answers[q.question_id]; if (a === undefined || a === null) return false; if (typeof a === 'string') return a.trim().length > 0; return true }
+  function isAnswered(q) { if (!q) return false; var a = answers[q.question_id]; if (a === undefined || a === null) return false; if (typeof a === 'string') return a.trim().length > 0; return true }
+  var answered = isAnswered(currentQuestion)
+
+  // ── FIX: Next button handler — hard clamped, never exceeds last index ─────
+  function handleNext() {
+    setCurrentIndex(function (p) {
+      var next = p + 1
+      return next >= questions.length ? p : next  // never go past last question
+    })
+  }
+
+  // Progress: count answered questions, not currentIndex
+  var answeredCount = questions.filter(function(q) { return isAnswered(q) }).length
+  var progress = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0
 
   var cardStyle = { background: C.card, border: '1px solid ' + C.border, borderRadius: 12, fontFamily: FONT }
   var px = m ? 20 : 28
@@ -141,8 +164,17 @@ export default function DailyCheckin(props) {
     )
   }
 
-  var qType = getQuestionType(currentQuestion); var answered = isAnswered(currentQuestion)
-  var labels = getScaleLabels(currentQuestion); var progress = ((currentIndex + (answered ? 1 : 0)) / questions.length * 100)
+  // ── FIX: null guard — if somehow currentQuestion is null, show nothing ────
+  if (!currentQuestion) return null
+
+  var qType = getQuestionType(currentQuestion)
+  var labels = getScaleLabels(currentQuestion)
+
+  // ── FIX: Show Complete button when on last question AND all answered
+  //         Show Next button only when NOT on last question
+  //         This eliminates the ambiguous state that caused the crash ────────
+  var showComplete = isLastQuestion && allAnswered
+  var showNext = !isLastQuestion
 
   return (
     <div style={Object.assign({}, cardStyle, { overflow: 'hidden' })}>
@@ -153,7 +185,7 @@ export default function DailyCheckin(props) {
           <span style={{ fontSize: 11, fontWeight: 500, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             {currentQuestion.is_weekly ? 'Weekly Behavioral Profile' : 'Daily Check-In'}
           </span>
-          <span style={{ fontSize: 12, color: C.dim, fontVariantNumeric: 'tabular-nums' }}>{currentIndex + 1} / {questions.length}</span>
+          <span style={{ fontSize: 12, color: C.dim, fontVariantNumeric: 'tabular-nums' }}>{safeIndex + 1} / {questions.length}</span>
         </div>
         <div style={{ width: '100%', height: 2, borderRadius: 1, background: C.border, marginTop: 12 }}>
           <div style={{ height: '100%', borderRadius: 1, width: progress + '%', background: C.text, transition: 'width 0.4s ease' }} />
@@ -243,24 +275,35 @@ export default function DailyCheckin(props) {
         </div>)}
       </div>
 
-      {/* Navigation */}
+      {/* Navigation — FIX: clean separation between Next and Complete */}
       <div style={{ padding: '0 ' + px + 'px ' + px + 'px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button onClick={function () { setCurrentIndex(function (p) { return p - 1 }) }} style={{
+        <button onClick={function () { setCurrentIndex(function (p) { return Math.max(p - 1, 0) }) }} style={{
           fontSize: 13, padding: '8px 16px', borderRadius: 6, border: '1px solid ' + C.border, background: 'transparent',
-          color: C.muted, cursor: 'pointer', fontFamily: FONT, visibility: currentIndex > 0 ? 'visible' : 'hidden',
+          color: C.muted, cursor: 'pointer', fontFamily: FONT, visibility: safeIndex > 0 ? 'visible' : 'hidden',
         }}>Back</button>
 
-        {isLastQuestion && allAnswered ? (
+        {showComplete && (
           <button onClick={handleSubmit} disabled={submitting} style={{
             fontSize: 14, fontWeight: 600, padding: m ? '14px 24px' : '12px 28px', borderRadius: 8, border: 'none', fontFamily: FONT,
             background: C.text, color: C.bg, cursor: submitting ? 'wait' : 'pointer', opacity: submitting ? 0.5 : 1,
           }}>{submitting ? 'Saving...' : 'Complete Check-In'}</button>
-        ) : (
-          <button onClick={function () { setCurrentIndex(function (p) { return p + 1 }) }} disabled={!answered} style={{
+        )}
+
+        {showNext && (
+          <button onClick={handleNext} disabled={!answered} style={{
             fontSize: 13, fontWeight: 500, padding: m ? '12px 20px' : '10px 24px', borderRadius: 6,
             border: '1px solid ' + (answered ? C.text : C.border), background: 'transparent', fontFamily: FONT,
             color: answered ? C.text : C.dim, cursor: answered ? 'pointer' : 'default',
           }}>Next</button>
+        )}
+
+        {/* On last question, not all answered yet — show disabled Next as placeholder */}
+        {isLastQuestion && !allAnswered && !showComplete && (
+          <button disabled style={{
+            fontSize: 13, fontWeight: 500, padding: m ? '12px 20px' : '10px 24px', borderRadius: 6,
+            border: '1px solid ' + C.border, background: 'transparent', fontFamily: FONT,
+            color: C.dim, cursor: 'default', opacity: 0.4,
+          }}>Answer to finish</button>
         )}
       </div>
     </div>

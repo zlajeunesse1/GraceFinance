@@ -1,21 +1,12 @@
 """
-GraceFinance — Grace AI Coach Service (v3.0)
+GraceFinance — Grace AI Coach Service (v3.1)
 ==============================================
-CHANGES FROM v2.2:
-  - Full v5.1 audit signals injected into user context:
-    * Three-component FCS breakdown (behavior, consistency, trend)
-    * Cross-dimensional coherence score
-    * Response entropy (gaming detection)
-    * Sustained deterioration flag
-    * Raw-composite gap (EMA masking detection)
-    * 7-day and 30-day slopes
-  - Grace becomes smarter per user over time:
-    * Low coherence → Grace probes contradictions
-    * Low entropy → Grace varies her questions
-    * Sustained deterioration → Grace surfaces the hidden trend
-    * Widening gap → Grace calls out the divergence
-  - System prompt updated with three-component formula knowledge
-  - Context builder uses UserMetricSnapshot directly (no legacy FCSSnapshot)
+CHANGES FROM v3.0:
+  - _build_user_context now injects full onboarding profile:
+    * Monthly income, expenses, available cash, savings rate
+    * User's stated financial goals (from onboarding_goals JSON)
+    * Personal mission/goal text (financial_goal field)
+  - Grace now knows who she's talking to from the first message
 """
 
 import os
@@ -179,6 +170,13 @@ WHAT YOU CAN DO:
 - When you have their data, reference specific numbers naturally.
 - Use integrity signals to ask smarter, more targeted questions.
 
+ABOUT SAVINGS GUIDANCE:
+- Framing matters. You coach behavior, not outcomes.
+- Say: "People who automate even $25/week tend to build the savings habit faster than those who try to save large lump sums."
+- Say: "One thing that tends to help is separating your savings into a different account — out of sight, out of mind."
+- Never say: "You should save $X" or "Put X% into savings."
+- The behavior-first framing keeps guidance educational and personal, not prescriptive.
+
 STRICT GUARDRAILS:
 1. NEVER recommend specific investments, stocks, bonds, crypto, or securities.
 2. NEVER provide specific tax advice or suggest tax strategies.
@@ -197,7 +195,7 @@ RESPONSE STYLE:
 - Use simple analogies for financial concepts.
 
 DISCLAIMER (include naturally when giving financial guidance, not for casual chat):
-"Just a reminder. I'm your coach, not a financial advisor. For specific investment or tax decisions, a licensed professional is the way to go."
+"Just a reminder — I'm your coach, not a financial advisor. For specific investment or tax decisions, a licensed professional is the way to go."
 """
 
 
@@ -217,6 +215,15 @@ DIMENSION_WEIGHTS = {
     "financial_agency": "10%",
 }
 
+ONBOARDING_GOAL_LABELS = {
+    "save": "Build Savings",
+    "debt": "Reduce Debt",
+    "track": "Understand Spending",
+    "budget": "Create a Budget System",
+    "wealth": "Grow Wealth",
+    "habits": "Change Financial Behavior",
+}
+
 
 def _score_band(score: float) -> str:
     if score >= 80:
@@ -234,26 +241,64 @@ def _score_band(score: float) -> str:
 
 def _build_user_context(db: Session, user_id) -> str:
     """
-    Build rich user context from the latest UserMetricSnapshot.
-    Includes all v5.1 audit signals for intelligent coaching.
+    Build rich user context from the latest UserMetricSnapshot + onboarding profile.
+    Includes all v5.1 audit signals + income/expenses/goals for personalized coaching.
     """
     context_parts = []
 
-    # User name
+    # ── User profile + onboarding data ──────────────────────────────────────
     try:
         from app.models import User
         user = db.query(User).filter(User.id == user_id).first()
         if user:
+            # Name
             name = getattr(user, "first_name", None)
             if name:
                 context_parts.append(f"User's name: {name}")
+
+            # Streak
             streak = getattr(user, "current_streak", 0) or 0
             if streak > 0:
                 context_parts.append(f"Current check-in streak: {streak} day{'s' if streak != 1 else ''}")
+
+            # ── ONBOARDING FINANCIAL PROFILE (THE PERSONALIZATION CORE) ──
+            income = getattr(user, "monthly_income", None)
+            expenses = getattr(user, "monthly_expenses", None)
+            goal_text = getattr(user, "financial_goal", None)
+            onboarding_goals = getattr(user, "onboarding_goals", None)
+
+            income_f = float(income) if income is not None else 0.0
+            expenses_f = float(expenses) if expenses is not None else 0.0
+
+            if income_f > 0:
+                context_parts.append(f"Monthly take-home income: ${income_f:,.0f}")
+            if expenses_f > 0:
+                context_parts.append(f"Monthly expenses: ${expenses_f:,.0f}")
+            if income_f > 0 and expenses_f > 0:
+                available = income_f - expenses_f
+                savings_rate = (available / income_f) * 100
+                if available >= 0:
+                    context_parts.append(
+                        f"Monthly available after expenses: ${available:,.0f} "
+                        f"({savings_rate:.0f}% savings rate)"
+                    )
+                else:
+                    context_parts.append(
+                        f"Monthly shortfall: ${abs(available):,.0f} "
+                        f"(expenses exceed income by {abs(savings_rate):.0f}%)"
+                    )
+
+            if goal_text and goal_text.strip():
+                context_parts.append(f"User's personal financial goal: \"{goal_text.strip()}\"")
+
+            if onboarding_goals and isinstance(onboarding_goals, list) and len(onboarding_goals) > 0:
+                readable = [ONBOARDING_GOAL_LABELS.get(g, g) for g in onboarding_goals]
+                context_parts.append(f"What they came here to work on: {', '.join(readable)}")
+
     except Exception:
         pass
 
-    # Latest snapshot with all audit signals
+    # ── Latest FCS snapshot with all audit signals ───────────────────────────
     try:
         from app.models.checkin import UserMetricSnapshot, CheckInResponse
         from sqlalchemy import func, and_
@@ -313,7 +358,7 @@ def _build_user_context(db: Session, user_id) -> str:
                 if strong:
                     context_parts.append(f"Strong dimensions (75+): {', '.join(strong)}")
 
-            # Integrity signals (internal coaching intelligence)
+            # Integrity signals
             integrity_parts = []
 
             coherence = getattr(snapshot, "fcs_coherence", None)
@@ -340,9 +385,9 @@ def _build_user_context(db: Session, user_id) -> str:
             if gap is not None:
                 gap_f = float(gap)
                 if gap_f < -3:
-                    integrity_parts.append(f"RAW-COMPOSITE GAP: {round(gap_f, 1)} points. The user's actual daily behavior is significantly below their displayed smoothed score. The trend is worse than it appears.")
+                    integrity_parts.append(f"RAW-COMPOSITE GAP: {round(gap_f, 1)} points. The user's actual daily behavior is significantly below their displayed smoothed score.")
                 elif gap_f > 3:
-                    integrity_parts.append(f"POSITIVE GAP: {round(gap_f, 1)} points. User's raw behavior is outperforming their displayed score. The improvement hasn't fully shown up yet. Encourage them.")
+                    integrity_parts.append(f"POSITIVE GAP: {round(gap_f, 1)} points. User's raw behavior is outperforming their displayed score. Encourage them.")
 
             slope_7d = getattr(snapshot, "fcs_slope_7d", None)
             slope_30d = getattr(snapshot, "fcs_slope_30d", None)
@@ -365,7 +410,6 @@ def _build_user_context(db: Session, user_id) -> str:
                     + "\n".join(integrity_parts)
                 )
 
-            # Check-in count
             checkin_count = getattr(snapshot, "checkin_count", 0)
             if checkin_count:
                 context_parts.append(f"Total responses in scoring window: {checkin_count}")
@@ -436,11 +480,14 @@ def chat_with_grace(db: Session, user_id, messages: list[dict]) -> str:
 def get_grace_intro(db: Session, user_id) -> dict:
     """Generate a personalized intro for the Grace chat page."""
     user_name = None
+    onboarding_goals = None
+
     try:
         from app.models import User
         user = db.query(User).filter(User.id == user_id).first()
         if user:
             user_name = getattr(user, "first_name", None)
+            onboarding_goals = getattr(user, "onboarding_goals", None)
     except Exception:
         pass
 
@@ -454,7 +501,21 @@ def get_grace_intro(db: Session, user_id) -> dict:
         "Help me set a realistic money goal",
     ]
 
-    # Personalize suggestions based on latest snapshot
+    # Personalize suggestions based on onboarding goals
+    if onboarding_goals and isinstance(onboarding_goals, list):
+        goal_suggestions = {
+            "save": "How do I build a savings habit that actually sticks?",
+            "debt": "What's the best behavioral approach to paying down debt?",
+            "track": "Help me understand where my money is actually going",
+            "budget": "How do I build a budget system I'll actually use?",
+            "wealth": "What financial habits do wealth builders have in common?",
+            "habits": "Help me break a bad money habit I keep repeating",
+        }
+        personalized = [goal_suggestions[g] for g in onboarding_goals if g in goal_suggestions]
+        if personalized:
+            suggestions = personalized[:3] + suggestions[:2]
+
+    # Personalize based on latest snapshot
     try:
         from app.models.checkin import UserMetricSnapshot
 

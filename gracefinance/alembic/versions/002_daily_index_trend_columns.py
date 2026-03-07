@@ -23,10 +23,6 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "daily_index",
-        sa.Column("trend_direction", sa.String(10), nullable=True),
-    )
-    op.add_column(
-        "daily_index",
         sa.Column("gci_slope_3d", sa.Float(), nullable=True),
     )
     op.add_column(

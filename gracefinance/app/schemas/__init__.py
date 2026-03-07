@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 from app.models.models import SubscriptionTier, DebtType, TransactionCategory, BillStatus
@@ -32,9 +32,18 @@ class UserResponse(BaseModel):
     email: str
     first_name: str
     last_name: str
-    monthly_income: float
-    monthly_expenses: float
-    financial_goal: str
+
+    # Financial profile — Optional so new users (NULL in DB) don't break
+    monthly_income: Optional[float] = None
+    monthly_expenses: Optional[float] = None
+    financial_goal: Optional[str] = None
+
+    # Onboarding — required by OnboardingGuard in App.jsx
+    onboarding_completed: bool = False
+
+    # Goal categories selected during onboarding (save/debt/track/budget/wealth/habits)
+    onboarding_goals: Optional[List[str]] = None
+
     subscription_tier: SubscriptionTier
     created_at: Optional[datetime] = None
 
@@ -45,7 +54,9 @@ class UserResponse(BaseModel):
 class UserOnboarding(BaseModel):
     monthly_income: float
     monthly_expenses: float
-    financial_goal: str
+    financial_goal: Optional[str] = ""
+    # Goal IDs from onboarding step: save, debt, track, budget, wealth, habits
+    onboarding_goals: Optional[List[str]] = None
 
 
 # ============ DEBT SCHEMAS ============

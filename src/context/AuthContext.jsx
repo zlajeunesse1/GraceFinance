@@ -11,14 +11,12 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const token = localStorage.getItem('grace_token')
     if (token) {
-      // Validate the token by calling /auth/me
       authApi.getMe()
         .then((userData) => {
           setUser(userData)
           setLoading(false)
         })
         .catch(() => {
-          // Token is invalid or expired — clear it
           localStorage.removeItem('grace_token')
           setLoading(false)
         })
@@ -29,7 +27,6 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const response = await authApi.login(email, password)
-    // FastAPI returns { access_token: "...", user: { id, email, first_name, ... } }
     if (response.access_token) {
       localStorage.setItem('grace_token', response.access_token)
       setUser(response.user)
@@ -39,12 +36,49 @@ export function AuthProvider({ children }) {
 
   async function signup(name, email, password) {
     const response = await authApi.signup(name, email, password)
-    // FastAPI returns { access_token: "...", user: { id, email, first_name, ... } }
     if (response.access_token) {
       localStorage.setItem('grace_token', response.access_token)
       setUser(response.user)
     }
     return response
+  }
+
+  /**
+   * completeOnboarding — called at the end of OnboardingPage.
+   * Sends financial profile to /auth/onboarding, updates user state,
+   * and cleans up localStorage draft data.
+   *
+   * @param {Object} data - { goals, income, expenses, debt, mission }
+   * @returns {Object} updated user object from server
+   */
+  async function completeOnboarding(data) {
+    const payload = {
+      monthly_income: data.income ? Number(data.income) : 0,
+      monthly_expenses: data.expenses ? Number(data.expenses) : 0,
+      financial_goal: data.mission || '',
+      onboarding_goals: data.goals || [],
+    }
+
+    const updatedUser = await authApi.completeOnboarding(payload)
+
+    // Update user state so onboarding_completed = true flows to guards
+    setUser(updatedUser)
+
+    // Clean up localStorage draft
+    localStorage.removeItem('grace-onboarding-complete')
+    localStorage.removeItem('grace-onboarding-data')
+
+    return updatedUser
+  }
+
+  /**
+   * updateIncome — lets users update income/expenses from Settings.
+   * Calls PATCH /auth/income and syncs user state.
+   */
+  async function updateIncome(monthly_income, monthly_expenses) {
+    const updatedUser = await authApi.updateIncome({ monthly_income, monthly_expenses })
+    setUser(updatedUser)
+    return updatedUser
   }
 
   function logout() {
@@ -55,7 +89,15 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      login,
+      signup,
+      logout,
+      completeOnboarding,
+      updateIncome,
+    }}>
       {children}
     </AuthContext.Provider>
   )
