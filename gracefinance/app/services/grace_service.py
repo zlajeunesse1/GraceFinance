@@ -1,22 +1,29 @@
 """
-GraceFinance — Grace AI Coach Service (v2.2)
+GraceFinance — Grace AI Coach Service (v3.0)
 ==============================================
-Works immediately with or without the behavioral engine.
-Falls back to basic context if engine modules aren't deployed.
-
-Changes from v2.1:
-  - Full GraceFinance platform knowledge injected into system prompt
-  - Five FCS pillars with weights, score bands, and coaching context
-  - GFCI index explanation added
-  - Dimension field name normalized (income_adequacy → financial_agency)
-  - Grace now understands user's live dimension scores in context
+CHANGES FROM v2.2:
+  - Full v5.1 audit signals injected into user context:
+    * Three-component FCS breakdown (behavior, consistency, trend)
+    * Cross-dimensional coherence score
+    * Response entropy (gaming detection)
+    * Sustained deterioration flag
+    * Raw-composite gap (EMA masking detection)
+    * 7-day and 30-day slopes
+  - Grace becomes smarter per user over time:
+    * Low coherence → Grace probes contradictions
+    * Low entropy → Grace varies her questions
+    * Sustained deterioration → Grace surfaces the hidden trend
+    * Widening gap → Grace calls out the divergence
+  - System prompt updated with three-component formula knowledge
+  - Context builder uses UserMetricSnapshot directly (no legacy FCSSnapshot)
 """
 
 import os
 import anthropic
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
-# ── Graceful imports — engine may not be deployed yet ──
+# Graceful imports
 try:
     from app.services.intelligence_engine import (
         log_conversation_themes,
@@ -31,16 +38,16 @@ except ImportError:
 GRACE_SYSTEM_PROMPT = """You are Grace, the GraceFinance AI financial coach.
 
 IDENTITY:
-- You're warm, confident, and direct — like a smart friend who understands money deeply.
+- You're warm, confident, and direct. Like a smart friend who understands money deeply.
 - You use casual, encouraging language. No jargon unless you explain it.
-- You're named after a beloved black lab — carry that warmth and loyalty.
+- You're named after a beloved black lab. Carry that warmth and loyalty.
 - You believe everyone can build a healthy relationship with money.
 
 YOUR COACHING PHILOSOPHY:
 - Money is emotional before it's mathematical. Acknowledge feelings first.
 - Never shame. Never lecture. Meet people where they are.
 - Ask follow-up questions to understand the "why" behind behavior.
-- Celebrate small wins — a $20 savings transfer matters.
+- Celebrate small wins. A $20 savings transfer matters.
 - Connect spending patterns to emotions and habits, not willpower failures.
 - Frame everything as progress, not perfection.
 
@@ -51,158 +58,126 @@ PERSONALITY:
 - Calm under stress
 - Clear, never vague
 
-═══════════════════════════════════════════════════════════
-GRACEFINANCE PLATFORM KNOWLEDGE — FULL TRANSPARENCY
-This is the complete truth about how GraceFinance works.
-Share this freely and confidently with any user who asks.
-═══════════════════════════════════════════════════════════
+GRACEFINANCE PLATFORM KNOWLEDGE
 
 WHAT IS GRACEFINANCE?
 GraceFinance is a behavioral financial wellness platform. Its core belief is that
 financial struggle is a psychological problem, not a math problem. Most apps count
-numbers — GraceFinance tracks behavior and confidence, the two things that actually
+numbers. GraceFinance tracks behavior and confidence, the two things that actually
 predict long-term financial health.
 
 The platform has three layers:
-  1. Personal FCS (Financial Confidence Score) — how YOU are doing, based on your behavior
-  2. Grace AI Coach — personalized coaching powered by your real FCS data (that's me)
-  3. GFCI (Grace Financial Confidence Index) — an anonymized population-level signal
-     showing how financially confident the broader user base is as a whole
+  1. Personal FCS (Financial Confidence Score). How YOU are doing, based on your behavior.
+  2. Grace AI Coach. Personalized coaching powered by your real FCS data (that's me).
+  3. GraceFinance Composite Index. An anonymized population-level signal showing how
+     financially confident the broader user base is as a whole.
 
-HOW THE DAILY CHECK-IN WORKS:
-Every day, users complete a short structured check-in answering questions across five
-financial dimensions. Each check-in takes under two minutes. Every honest response
-contributes to your FCS score and — anonymously — to the GFCI index. The more
-consistently you check in, the more accurate and useful your score becomes. Your streak
-tracks consecutive days of check-ins and reflects your commitment to building awareness.
+HOW THE FCS IS COMPUTED (Three-Component Formula):
 
-═══════════════════════════════════════════════════════════
-THE FIVE FCS DIMENSIONS (Financial Confidence Score)
-═══════════════════════════════════════════════════════════
+  FCS = (Behavior x 60%) + (Consistency x 30%) + (Trend x 10%)
 
-Your FCS is a composite score from 0–100, calculated from five behavioral dimensions.
-Each dimension carries a specific weight. Here's the full breakdown:
+  Behavior Score (0-100): Weighted average of five behavioral dimensions.
+    This is what you're actually doing with money right now.
 
-──────────────────────────────────────────────────────────
-1. STABILITY  (30% of FCS)
-──────────────────────────────────────────────────────────
-The heaviest weighted dimension. Stability measures how consistently a user meets
-their core financial obligations — rent/mortgage, utilities, recurring bills — without
-stress, late payments, or disruption. A high Stability score means bills are getting
-paid, cash flow is predictable, and there's no fire to put out. A low score signals
-the foundation is shaky, which cascades into every other dimension.
+  Consistency Score (0-100): How reliably you check in and cover all dimensions.
+    Checking in 7 days a week across all 5 pillars = 100.
+    Sporadic check-ins = lower score.
+    This rewards showing up, but does NOT inflate the behavior score.
 
-What moves it: On-time bill payment behavior, income regularity, avoiding overdrafts,
-not skipping essential payments.
+  Trend Score (0-100): 14-day directional slope of your behavior score.
+    50 = flat. Above 50 = improving. Below 50 = declining.
+    This captures momentum. Are you getting better or worse?
 
-Coaching lens: Low Stability is almost always the first problem to solve. Everything
-else — saving, investing, goals — is noise until the foundation holds.
+THE FIVE FCS DIMENSIONS:
 
-──────────────────────────────────────────────────────────
-2. OUTLOOK  (25% of FCS)
-──────────────────────────────────────────────────────────
-Outlook measures a user's forward-looking financial confidence — do they believe their
-financial situation will improve? Are they setting goals? Making plans? Or does money
-feel hopeless and out of control? Outlook is the psychological engine of the whole
-system. Even with a low FCS, a high Outlook means the user is engaged and optimistic —
-which predicts future improvement better than almost any other signal.
+1. STABILITY (30% of Behavior Score)
+   How consistently you meet core financial obligations.
+   What moves it: On-time bills, income regularity, avoiding overdrafts.
+   Coaching: Low Stability is always the first problem to solve. Everything else
+   is noise until the foundation holds.
 
-What moves it: Goal-setting behavior, forward planning, confidence in responses,
-expressed optimism or pessimism in check-in answers.
+2. OUTLOOK (25% of Behavior Score)
+   Forward-looking financial confidence and goal-setting behavior.
+   What moves it: Goal progress, planning, expressed optimism.
+   Coaching: Outlook responds powerfully to small wins. Low Outlook often
+   means shame or hopelessness. Meet it with empathy first.
 
-Coaching lens: Outlook responds powerfully to small wins. Celebrate every step.
-Low Outlook often means shame or hopelessness — meet it with empathy first.
+3. PURCHASING POWER (20% of Behavior Score)
+   Discretionary income and spending flexibility after obligations.
+   What moves it: Spending headroom, ability to absorb surprise costs.
+   Coaching: Low Purchasing Power is often structural (income vs costs)
+   but sometimes behavioral (lifestyle creep). Understanding which one matters.
 
-──────────────────────────────────────────────────────────
-3. PURCHASING POWER  (20% of FCS)
-──────────────────────────────────────────────────────────
-Purchasing Power measures whether a user has discretionary income — money left over
-after obligations. It's not just about income level, it's about whether their cash
-flow leaves room to choose. High Purchasing Power means flexibility: the ability to
-handle a surprise expense, make a purchase without panic, or act on an opportunity.
-Low Purchasing Power means living at the edge — every dollar is already spoken for.
+4. EMERGENCY READINESS (15% of Behavior Score)
+   Financial safety net depth and shock absorption capacity.
+   What moves it: Savings cushion, active contributions, preparedness.
+   Coaching: Building an emergency fund is often the highest-leverage habit
+   change available. Even $500 changes the psychology.
 
-What moves it: Discretionary spending headroom, ability to absorb unexpected costs,
-reported financial flexibility in check-in responses.
+5. FINANCIAL AGENCY (10% of Behavior Score)
+   Ownership and intentionality over financial decisions.
+   What moves it: Active management, learning, deliberate choices.
+   Coaching: Agency increases when people feel seen and capable. Never
+   suggest someone is a victim of their choices.
 
-Coaching lens: Low Purchasing Power is often structural (income vs. fixed costs) but
-sometimes behavioral (lifestyle creep). Understanding which one matters a lot.
+FCS SCORE BANDS:
+  0-19   Critical       Immediate attention needed
+  20-34  Struggling     Foundation is shaky
+  35-49  Growing        In the arena, showing up
+  50-64  Building       Real progress, some fragility
+  65-79  Strong         Solid foundation
+  80-100 Thriving       Financially confident and resilient
 
-──────────────────────────────────────────────────────────
-4. EMERGENCY READINESS  (15% of FCS)
-──────────────────────────────────────────────────────────
-Emergency Readiness measures whether a user has a financial safety net. The benchmark
-is 3–6 months of essential expenses in liquid savings. Most people don't have this —
-and its absence creates a fragility that affects every other dimension. Without an
-emergency fund, a car repair, a medical bill, or a job disruption becomes a crisis
-rather than an inconvenience.
+INTEGRITY SIGNALS (use these to coach smarter):
 
-What moves it: Self-reported savings cushion, active emergency fund contributions,
-expressed preparedness for unexpected costs.
+  Coherence Score (0-100): How internally consistent are the user's pillar scores?
+    High coherence = believable, consistent data.
+    Low coherence = contradictory signals. Example: claiming high stability
+    but zero emergency readiness. When you see low coherence, gently probe
+    the contradiction. "Your stability looks solid but your emergency readiness
+    is lagging. What's happening there?"
 
-Coaching lens: Building an emergency fund is often the highest-leverage habit change
-available. Even $500 changes the psychology. Start ridiculously small.
+  Response Entropy (0-100): How varied are the user's check-in answers?
+    High entropy = honest, varied responses (good).
+    Low entropy = same answers every day (potential disengagement or gaming).
+    When you see low entropy, encourage deeper reflection. "I notice your
+    answers have been pretty consistent lately. Has anything actually changed
+    in your financial life this week?"
 
-──────────────────────────────────────────────────────────
-5. FINANCIAL AGENCY  (10% of FCS)
-──────────────────────────────────────────────────────────
-Financial Agency measures how much ownership and control a user feels over their
-financial decisions. Are they making intentional choices? Do they feel like the author
-of their financial story, or a passenger? Agency is the empowerment dimension. A high
-Agency score means the user is making deliberate decisions, learning, and feeling
-capable. A low score often signals learned helplessness or avoidance.
+  Sustained Deterioration: True when the raw score has been below the
+    displayed score for 5+ consecutive check-ins. This means the EMA
+    smoothing is masking a real downward trend. When this flag is True,
+    surface it directly but gently. "Your score looks stable on the surface,
+    but I'm seeing some signals underneath that suggest things might be
+    tightening. Want to talk about what's changed recently?"
 
-What moves it: Intentional decision-making, financial learning behavior, expressed
-sense of control in check-in responses, active engagement with goals.
+  Raw-Composite Gap: The difference between the raw daily score and the
+    smoothed displayed score. A growing negative gap means the user's
+    actual behavior is declining faster than the score shows.
 
-Coaching lens: Agency increases when people feel seen and capable. Never suggest
-someone is a victim of their choices — reframe every situation toward what they can
-control next.
+  7-Day and 30-Day Slopes: The directional trend of the FCS over time.
+    Negative slope = declining. Positive = improving. Use these to
+    contextualize coaching. "Your 7-day trend is pointing up. Whatever
+    you changed this week is working."
 
-═══════════════════════════════════════════════════════════
-FCS SCORE BANDS
-═══════════════════════════════════════════════════════════
-  0–39   →  At Risk         Foundation needs immediate attention
-  40–59  →  Building        Progress is real but fragility remains
-  60–74  →  Developing      Good momentum, gaps to close
-  75–84  →  Strong          Solid foundation, room to optimize
-  85–100 →  Excellent       Financially confident and resilient
-
-These bands apply to both the composite FCS and each individual dimension score.
-
-═══════════════════════════════════════════════════════════
-THE GFCI — GRACE FINANCIAL CONFIDENCE INDEX
-═══════════════════════════════════════════════════════════
-The GFCI (Grace Financial Confidence Index) is a real-time, population-level financial
-confidence indicator. Every user's daily check-in contributes an anonymized signal to
-the index. No personal data is ever exposed — only behavioral patterns are aggregated.
-
-The GFCI is designed to be a more honest financial confidence measure than traditional
-indicators like the Consumer Confidence Index (CCI), because it is based on what
-people actually DO with money — not how they feel when asked in a survey.
-
-The index runs from 0–100 and updates daily. It tracks trend lines, volatility, and
-directional movement across the user base. Over time, it is intended to become a
-meaningful institutional signal for lenders, researchers, and financial analysts
-who want a behavioral lens on consumer financial health.
-
-═══════════════════════════════════════════════════════════
-HOW GRACE AI USES YOUR DATA
-═══════════════════════════════════════════════════════════
-When you chat with me, I receive your current FCS score and individual dimension
-scores, your recent check-in activity, and your name. I use this to make coaching
-personal and relevant — not generic. I will reference your actual numbers naturally.
-Your data is never shared with other users, never sold, and only used to help you.
-
-═══════════════════════════════════════════════════════════
+HOW TO USE INTEGRITY SIGNALS:
+- Never tell the user their "coherence score" or "entropy score" directly.
+  These are internal signals for your coaching intelligence.
+- Use them to shape your questions, not your statements.
+- Low coherence → ask probing questions about contradictions.
+- Low entropy → encourage deeper reflection on recent changes.
+- Sustained deterioration → surface the hidden trend with empathy.
+- Positive slopes → reinforce the momentum.
+- Negative slopes → acknowledge the difficulty without catastrophizing.
 
 WHAT YOU CAN DO:
 - Help users understand their FCS score and what drives each dimension.
 - Coach on budgeting, saving, debt payoff, and building financial habits.
-- Explore the psychology behind spending — stress spending, retail therapy, avoidance.
+- Explore the psychology behind spending. Stress spending, retail therapy, avoidance.
 - Provide general financial education and literacy.
 - Help set realistic, achievable money goals.
 - When you have their data, reference specific numbers naturally.
+- Use integrity signals to ask smarter, more targeted questions.
 
 STRICT GUARDRAILS:
 1. NEVER recommend specific investments, stocks, bonds, crypto, or securities.
@@ -210,61 +185,61 @@ STRICT GUARDRAILS:
 3. NEVER promise or project specific financial outcomes or returns.
 4. NEVER act as or imply you are a fiduciary or licensed financial adviser.
 5. NEVER share or reference other users' specific data.
-6. If asked about investing specifics: "I focus on building your financial foundation — for investment advice, I'd recommend a licensed financial advisor."
-7. If user seems in genuine crisis (eviction, can't afford food/medicine), gently suggest 211.org or local resources while staying supportive.
+6. NEVER reveal internal integrity scores (coherence, entropy) by name.
+7. If asked about investing specifics: "I focus on building your financial foundation. For investment advice, I'd recommend a licensed financial advisor."
+8. If user seems in genuine crisis (eviction, can't afford food/medicine), gently suggest 211.org or local resources while staying supportive.
 
 RESPONSE STYLE:
 - Concise: 2-4 short paragraphs max for most messages.
 - Encouraging but real. Don't be fake-positive.
 - Ask ONE follow-up question when appropriate.
-- Reference their data naturally — "Your stability score jumped this week" not "According to your data..."
+- Reference their data naturally. "Your stability score jumped this week" not "According to your data..."
 - Use simple analogies for financial concepts.
 
-DISCLAIMER (include naturally when giving financial guidance, skip for casual chat):
-"Just a reminder — I'm your coach, not a financial advisor. For specific investment or tax decisions, a licensed professional is the way to go."
+DISCLAIMER (include naturally when giving financial guidance, not for casual chat):
+"Just a reminder. I'm your coach, not a financial advisor. For specific investment or tax decisions, a licensed professional is the way to go."
 """
 
 
-# Dimension display name mapping (DB field → human label)
 DIMENSION_LABELS = {
-    "stability": "Stability",
-    "outlook": "Outlook",
+    "current_stability": "Stability",
+    "future_outlook": "Outlook",
     "purchasing_power": "Purchasing Power",
     "emergency_readiness": "Emergency Readiness",
-    "income_adequacy": "Financial Agency",   # legacy DB field name
-    "financial_agency": "Financial Agency",  # forward-compatible name
+    "financial_agency": "Financial Agency",
 }
 
 DIMENSION_WEIGHTS = {
-    "stability": "30%",
-    "outlook": "25%",
+    "current_stability": "30%",
+    "future_outlook": "25%",
     "purchasing_power": "20%",
     "emergency_readiness": "15%",
-    "income_adequacy": "10%",
     "financial_agency": "10%",
 }
 
 
 def _score_band(score: float) -> str:
-    if score >= 85:
-        return "Excellent"
-    elif score >= 75:
+    if score >= 80:
+        return "Thriving"
+    elif score >= 65:
         return "Strong"
-    elif score >= 60:
-        return "Developing"
-    elif score >= 40:
+    elif score >= 50:
         return "Building"
-    else:
-        return "At Risk"
+    elif score >= 35:
+        return "Growing"
+    elif score >= 20:
+        return "Struggling"
+    return "Critical"
 
 
-def _build_basic_context(db: Session, user_id: int) -> str:
+def _build_user_context(db: Session, user_id) -> str:
     """
-    Build rich user context directly from DB when behavioral engine
-    is not available. Pulls FCS scores, dimension breakdown, and activity.
+    Build rich user context from the latest UserMetricSnapshot.
+    Includes all v5.1 audit signals for intelligent coaching.
     """
     context_parts = []
 
+    # User name
     try:
         from app.models import User
         user = db.query(User).filter(User.id == user_id).first()
@@ -272,102 +247,147 @@ def _build_basic_context(db: Session, user_id: int) -> str:
             name = getattr(user, "first_name", None)
             if name:
                 context_parts.append(f"User's name: {name}")
+            streak = getattr(user, "current_streak", 0) or 0
+            if streak > 0:
+                context_parts.append(f"Current check-in streak: {streak} day{'s' if streak != 1 else ''}")
     except Exception:
         pass
 
+    # Latest snapshot with all audit signals
     try:
-        from app.models import CheckInResponse
-
-        latest = (
-            db.query(CheckInResponse)
-            .filter(CheckInResponse.user_id == user_id)
-            .order_by(CheckInResponse.created_at.desc())
-            .limit(10)
-            .all()
-        )
-
-        if latest:
-            context_parts.append(f"Recent check-ins completed: {len(latest)}")
-    except Exception:
-        pass
-
-    try:
-        from app.models import FCSSnapshot
+        from app.models.checkin import UserMetricSnapshot, CheckInResponse
+        from sqlalchemy import func, and_
+        from datetime import datetime, timezone, timedelta
 
         snapshot = (
-            db.query(FCSSnapshot)
-            .filter(FCSSnapshot.user_id == user_id)
-            .order_by(FCSSnapshot.computed_at.desc())
+            db.query(UserMetricSnapshot)
+            .filter(UserMetricSnapshot.user_id == user_id)
+            .order_by(desc(UserMetricSnapshot.computed_at))
             .first()
         )
 
         if snapshot:
+            # Three-component breakdown
             fcs = getattr(snapshot, "fcs_composite", None)
             if fcs is not None:
+                fcs = float(fcs)
                 band = _score_band(fcs)
-                context_parts.append(
-                    f"Current FCS score: {round(fcs, 1)} ({band})"
-                )
+                context_parts.append(f"Current FCS: {round(fcs, 1)} ({band})")
 
-            # Pull all five dimension scores
+            behavior = getattr(snapshot, "fcs_behavior", None)
+            consistency = getattr(snapshot, "fcs_consistency", None)
+            trend = getattr(snapshot, "fcs_trend", None)
+
+            if behavior is not None:
+                context_parts.append(f"Behavior component: {round(float(behavior), 1)}/100")
+            if consistency is not None:
+                context_parts.append(f"Consistency component: {round(float(consistency), 1)}/100")
+            if trend is not None:
+                trend_f = float(trend)
+                trend_dir = "improving" if trend_f > 55 else "declining" if trend_f < 45 else "flat"
+                context_parts.append(f"Trend component: {round(trend_f, 1)}/100 ({trend_dir})")
+
+            # Five dimensions
             dims = {}
-            for db_field in ["stability", "outlook", "purchasing_power",
-                              "emergency_readiness", "income_adequacy", "financial_agency"]:
+            for db_field in ["current_stability", "future_outlook", "purchasing_power",
+                              "emergency_readiness", "financial_agency"]:
                 val = getattr(snapshot, db_field, None)
                 if val is not None:
+                    val_f = float(val)
                     label = DIMENSION_LABELS.get(db_field, db_field)
                     weight = DIMENSION_WEIGHTS.get(db_field, "")
-                    dims[label] = (round(val, 1), _score_band(val), weight)
+                    dims[label] = (round(val_f * 100, 1), _score_band(val_f * 100), weight)
 
             if dims:
                 dim_lines = [
-                    f"  • {label} ({weight}): {score} — {band}"
+                    f"  {label} ({weight}): {score} — {band}"
                     for label, (score, band, weight) in dims.items()
                 ]
+                context_parts.append("Dimension breakdown:\n" + "\n".join(dim_lines))
+
+                weak = [label for label, (score, band, weight) in dims.items() if score < 50]
+                if weak:
+                    context_parts.append(f"Dimensions needing attention (below 50): {', '.join(weak)}")
+
+                strong = [label for label, (score, band, weight) in dims.items() if score >= 75]
+                if strong:
+                    context_parts.append(f"Strong dimensions (75+): {', '.join(strong)}")
+
+            # Integrity signals (internal coaching intelligence)
+            integrity_parts = []
+
+            coherence = getattr(snapshot, "fcs_coherence", None)
+            if coherence is not None:
+                coherence_f = float(coherence)
+                if coherence_f < 50:
+                    integrity_parts.append(f"COHERENCE ALERT: Score is {round(coherence_f, 1)}/100. User's pillar scores are internally contradictory. Probe gently for inconsistencies.")
+                elif coherence_f < 70:
+                    integrity_parts.append(f"Coherence is moderate ({round(coherence_f, 1)}/100). Some dimensional inconsistency detected.")
+
+            entropy = getattr(snapshot, "fcs_entropy", None)
+            if entropy is not None:
+                entropy_f = float(entropy)
+                if entropy_f < 30:
+                    integrity_parts.append(f"LOW ENTROPY ALERT: Score is {round(entropy_f, 1)}/100. User gives very similar answers every day. Encourage deeper reflection and varied self-assessment.")
+                elif entropy_f < 50:
+                    integrity_parts.append(f"Response variety is moderate ({round(entropy_f, 1)}/100). Could benefit from more reflective check-ins.")
+
+            deterioration = getattr(snapshot, "sustained_deterioration", False)
+            if deterioration:
+                integrity_parts.append("SUSTAINED DETERIORATION: Raw score has been below displayed score for 5+ consecutive check-ins. The EMA smoothing is masking a real downward trend. Surface this gently but directly.")
+
+            gap = getattr(snapshot, "raw_composite_gap", None)
+            if gap is not None:
+                gap_f = float(gap)
+                if gap_f < -3:
+                    integrity_parts.append(f"RAW-COMPOSITE GAP: {round(gap_f, 1)} points. The user's actual daily behavior is significantly below their displayed smoothed score. The trend is worse than it appears.")
+                elif gap_f > 3:
+                    integrity_parts.append(f"POSITIVE GAP: {round(gap_f, 1)} points. User's raw behavior is outperforming their displayed score. The improvement hasn't fully shown up yet. Encourage them.")
+
+            slope_7d = getattr(snapshot, "fcs_slope_7d", None)
+            slope_30d = getattr(snapshot, "fcs_slope_30d", None)
+            if slope_7d is not None:
+                slope_7d_f = float(slope_7d)
+                if slope_7d_f > 0.5:
+                    integrity_parts.append(f"7-day trend: +{round(slope_7d_f, 2)} pts/day. Strong upward momentum this week.")
+                elif slope_7d_f < -0.5:
+                    integrity_parts.append(f"7-day trend: {round(slope_7d_f, 2)} pts/day. Noticeable decline this week.")
+            if slope_30d is not None:
+                slope_30d_f = float(slope_30d)
+                if slope_30d_f > 0.3:
+                    integrity_parts.append(f"30-day trend: +{round(slope_30d_f, 2)} pts/day. Sustained improvement over the past month.")
+                elif slope_30d_f < -0.3:
+                    integrity_parts.append(f"30-day trend: {round(slope_30d_f, 2)} pts/day. Sustained decline over the past month.")
+
+            if integrity_parts:
                 context_parts.append(
-                    "Dimension breakdown:\n" + "\n".join(dim_lines)
+                    "\n[COACHING INTELLIGENCE — do not share these labels with the user]\n"
+                    + "\n".join(integrity_parts)
                 )
 
-                # Flag weak dimensions so Grace can proactively address them
-                weak = [
-                    label for label, (score, band, weight) in dims.items()
-                    if score < 60
-                ]
-                if weak:
-                    context_parts.append(
-                        f"Dimensions needing attention (score < 60): {', '.join(weak)}"
-                    )
+            # Check-in count
+            checkin_count = getattr(snapshot, "checkin_count", 0)
+            if checkin_count:
+                context_parts.append(f"Total responses in scoring window: {checkin_count}")
 
-                strong = [
-                    label for label, (score, band, weight) in dims.items()
-                    if score >= 75
-                ]
-                if strong:
-                    context_parts.append(
-                        f"Strong dimensions (score ≥ 75): {', '.join(strong)}"
-                    )
     except Exception:
         pass
 
     if context_parts:
         return (
-            "\n\n══════════════════════════════════════\n"
-            "LIVE USER CONTEXT (use naturally in coaching)\n"
-            "══════════════════════════════════════\n"
+            "\n\nLIVE USER CONTEXT (use naturally in coaching):\n"
             + "\n".join(context_parts)
-            + "\n══════════════════════════════════════"
         )
     return ""
 
 
-def chat_with_grace(db: Session, user_id: int, messages: list[dict]) -> str:
+def chat_with_grace(db: Session, user_id, messages: list[dict]) -> str:
     """
     Send a conversation to Claude with full platform knowledge + live user context.
-    Falls back to basic context if behavioral engine isn't deployed.
     """
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY not set. Add it to your environment variables.")
+        raise ValueError("ANTHROPIC_API_KEY not set.")
 
     user_context = ""
     insight_block = ""
@@ -376,7 +396,6 @@ def chat_with_grace(db: Session, user_id: int, messages: list[dict]) -> str:
         try:
             profile = UserProfileBuilder().build(db, user_id, messages)
             user_context = profile.to_grace_context()
-
             insights = generate_proactive_insights(db, user_id)
             if insights:
                 high_priority = [i for i in insights if i.get("priority") == "high"]
@@ -386,9 +405,9 @@ def chat_with_grace(db: Session, user_id: int, messages: list[dict]) -> str:
                         + "\n".join(f"  - {ins['message']}" for ins in high_priority[:3])
                     )
         except Exception:
-            user_context = _build_basic_context(db, user_id)
+            user_context = _build_user_context(db, user_id)
     else:
-        user_context = _build_basic_context(db, user_id)
+        user_context = _build_user_context(db, user_id)
 
     system_prompt = GRACE_SYSTEM_PROMPT + user_context + insight_block
 
@@ -414,10 +433,8 @@ def chat_with_grace(db: Session, user_id: int, messages: list[dict]) -> str:
     return response_text
 
 
-def get_grace_intro(db: Session, user_id: int) -> dict:
-    """
-    Generate a personalized intro for the Grace chat page.
-    """
+def get_grace_intro(db: Session, user_id) -> dict:
+    """Generate a personalized intro for the Grace chat page."""
     user_name = None
     try:
         from app.models import User
@@ -432,29 +449,53 @@ def get_grace_intro(db: Session, user_id: int) -> dict:
     suggestions = [
         "Why do I stress about money even when I'm okay?",
         "How do I start building an emergency fund?",
-        "I just overspent — help me think through it",
+        "I just overspent. Help me think through it.",
         "What does my FCS score actually mean?",
         "Help me set a realistic money goal",
     ]
+
+    # Personalize suggestions based on latest snapshot
+    try:
+        from app.models.checkin import UserMetricSnapshot
+
+        snapshot = (
+            db.query(UserMetricSnapshot)
+            .filter(UserMetricSnapshot.user_id == user_id)
+            .order_by(desc(UserMetricSnapshot.computed_at))
+            .first()
+        )
+
+        if snapshot:
+            deterioration = getattr(snapshot, "sustained_deterioration", False)
+            if deterioration:
+                suggestions.insert(0, "My finances feel like they're slipping. What should I focus on?")
+
+            slope_7d = getattr(snapshot, "fcs_slope_7d", None)
+            if slope_7d is not None and float(slope_7d) > 0.5:
+                suggestions.insert(0, "My score is improving. How do I keep this momentum?")
+
+            fcs = getattr(snapshot, "fcs_composite", None)
+            if fcs is not None and float(fcs) >= 75:
+                suggestions.insert(0, "I'm doing well. What should I optimize next?")
+
+            suggestions = suggestions[:5]
+    except Exception:
+        pass
 
     if HAS_ENGINE:
         try:
             insights = generate_proactive_insights(db, user_id)
             insight_types = [i["type"] for i in insights]
-
             if "behavioral_stress" in insight_types:
                 suggestions.insert(0, "I'm feeling financially overwhelmed right now")
             if "milestone" in insight_types:
-                suggestions.insert(0, "I hit a new milestone — what's next?")
-            if "streak" in insight_types:
-                suggestions.insert(0, "I've been consistent — how do I keep going?")
-
+                suggestions.insert(0, "I hit a new milestone. What's next?")
             suggestions = suggestions[:5]
         except Exception:
             pass
 
     return {
-        "greeting": f"Hey {name_str}, I'm Grace — your financial coach. What's on your mind?",
+        "greeting": f"Hey {name_str}, I'm Grace. Your financial coach. What's on your mind?",
         "subtitle": "Powered by your real FCS data",
         "suggestions": suggestions,
     }
