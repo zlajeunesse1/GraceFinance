@@ -24,6 +24,7 @@ from app.routers import (
 )
 from app.routers.grace import router as grace_router
 from app.routers.profile import router as profile_router
+from app.routers.legal_routes import router as legal_router
 from app.routers import me_router
 
 settings = get_settings()
@@ -98,6 +99,12 @@ app.include_router(me_router)
 # ── Social Feed ──
 app.include_router(feed_router)
 
+# ── Migration (temporary — remove after running) ──
+app.include_router(migrate_router)
+
+# ── Legal Pages ──
+app.include_router(legal_router)
+
 
 @app.get("/")
 def root():
@@ -116,6 +123,11 @@ def root():
         },
         "profile": "/api/profile",
         "feed": "/feed/",
+        "legal": {
+            "terms": "/legal/terms",
+            "privacy": "/legal/privacy",
+            "refund": "/legal/refund",
+        },
     }
 
 
