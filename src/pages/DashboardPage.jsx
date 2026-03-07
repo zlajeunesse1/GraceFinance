@@ -34,9 +34,9 @@ var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
 var dimensionLabels = { current_stability: "Stability", future_outlook: "Outlook", purchasing_power: "Purchasing Power", emergency_readiness: "Emergency Readiness", financial_agency: "Financial Agency" }
 var dimensionWeights = { current_stability: 0.30, future_outlook: 0.25, purchasing_power: 0.20, emergency_readiness: 0.15, financial_agency: 0.10 }
 var dimensionTips = {
-  current_stability: "Automate your biggest bill this week. One less thing to think about builds real stability.",
+  current_stability: "Automate your biggest bill this week. One less decision to make builds real stability.",
   future_outlook: "Set one 90-day financial target. People who write goals down are 42% more likely to hit them.",
-  purchasing_power: "Notice where your money goes this week — awareness alone shifts spending patterns.",
+  purchasing_power: "Notice where your money goes this week. Awareness alone shifts spending patterns.",
   emergency_readiness: "Move even $10 to a separate account today. The habit matters more than the amount.",
   financial_agency: "Spend 5 minutes reviewing your finances this week. Small actions compound into confidence.",
 }
@@ -44,10 +44,10 @@ var dimensionTips = {
 function getScoreLabel(score) { if (score >= 80) return "Thriving"; if (score >= 65) return "Strong"; if (score >= 50) return "Building"; if (score >= 35) return "Growing"; if (score >= 20) return "Emerging"; return "Starting" }
 function getScoreMessage(score) {
   if (score >= 80) return "You're in a strong position. Let's keep the momentum going."
-  if (score >= 65) return "Solid foundation — you're more financially aware than most people."
+  if (score >= 65) return "Solid foundation. You're more financially aware than most people."
   if (score >= 50) return "You're building something real. Small consistent moves compound over time."
   if (score >= 35) return "You're in the arena and showing up. That's where change starts."
-  if (score >= 20) return "Tough stretch — but the fact that you're here says everything."
+  if (score >= 20) return "Tough stretch, but the fact that you're here says everything."
   return "Every journey starts with a first step. You just took yours."
 }
 
@@ -87,7 +87,7 @@ function Nav(props) {
 
 function FCSScore(props) {
   var score = props.score; var trend = props.trend; var checkinCount = props.checkinCount || 0; var isMobile = props.isMobile
-  var label = score != null ? getScoreLabel(score) : "—"
+  var label = score != null ? getScoreLabel(score) : "..."
   var radius = isMobile ? 50 : 58; var size = isMobile ? 112 : 132
   var circumference = 2 * Math.PI * radius; var offset = circumference - ((score != null ? score : 0) / 100) * circumference
 
@@ -101,7 +101,7 @@ function FCSScore(props) {
         </svg>
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <span style={{ fontSize: isMobile ? 30 : 36, fontWeight: 300, color: C.text, letterSpacing: "-0.03em", fontFamily: FONT, fontVariantNumeric: "tabular-nums" }}>
-            {score != null ? <AnimatedNumber value={score} decimals={1} /> : <span style={{ color: C.dim }}>—</span>}
+            {score != null ? <AnimatedNumber value={score} decimals={1} /> : <span style={{ color: C.dim }}>...</span>}
           </span>
           <span style={{ fontSize: 10, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 2 }}>{label}</span>
         </div>
@@ -121,7 +121,7 @@ function FCSScore(props) {
 function QuickStats(props) {
   var score = props.score; var checkins = props.checkinCount; var streak = props.streak; var isMobile = props.isMobile
   var stats = [
-    { label: "FCS", value: score != null ? score.toFixed(1) : "—", sub: score != null ? getScoreLabel(score) : "Check in to start" },
+    { label: "FCS", value: score != null ? score.toFixed(1) : "...", sub: score != null ? getScoreLabel(score) : "Check in to start" },
     { label: "Streak", value: streak != null && streak > 0 ? streak + "d" : "0d", sub: streak != null && streak > 0 ? "consecutive" : "Check in to start" },
     { label: "This Week", value: checkins != null ? String(checkins) : "0", sub: "check-ins" },
   ]
@@ -145,7 +145,7 @@ function DimensionBreakdown(props) {
   dims.forEach(function (d) { var val = metrics[d]; if (val != null && val < weakestScore) { weakestScore = val; weakest = d } })
   var hasData = dims.some(function (d) { return metrics[d] != null })
 
-  if (!hasData) { return (<Card><Label>Your Dimensions</Label><p style={{ fontSize: 13, color: C.dim, margin: "16px 0 0", lineHeight: 1.7, fontFamily: FONT }}>Your confidence is measured across five dimensions. Complete a check-in to see how you're doing in each area.</p></Card>) }
+  if (!hasData) { return (<Card><Label>Your Dimensions</Label><p style={{ fontSize: 13, color: C.dim, margin: "16px 0 0", lineHeight: 1.7, fontFamily: FONT }}>Your confidence is measured across five dimensions. Complete a check-in to see how you score in each area.</p></Card>) }
 
   return (
     <Card>
@@ -159,7 +159,7 @@ function DimensionBreakdown(props) {
                 <span style={{ color: C.text, fontSize: 13, fontWeight: 500, fontFamily: FONT }}>{dimensionLabels[dim]}</span>
                 <span style={{ fontSize: 10, color: C.dim, fontFamily: FONT }}>{weight}%</span>
               </div>
-              <span style={{ color: pct != null ? C.text : C.dim, fontSize: 14, fontWeight: 600, fontFamily: FONT, fontVariantNumeric: "tabular-nums" }}>{pct != null ? pct : "—"}</span>
+              <span style={{ color: pct != null ? C.text : C.dim, fontSize: 14, fontWeight: 600, fontFamily: FONT, fontVariantNumeric: "tabular-nums" }}>{pct != null ? pct : "..."}</span>
             </div>
             <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: "hidden" }}>
               <div style={{ height: "100%", width: (pct != null ? pct : 0) + "%", background: C.text, borderRadius: 2, transition: "width 1s ease", opacity: pct != null ? (pct > 60 ? 1 : pct > 30 ? 0.6 : 0.35) : 0 }} />
@@ -169,7 +169,7 @@ function DimensionBreakdown(props) {
       </div>
       {weakest && weakestScore < 0.5 && (
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid " + C.border }}>
-          <div style={{ fontSize: 11, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6, fontFamily: FONT }}>Your next move — {dimensionLabels[weakest]}</div>
+          <div style={{ fontSize: 11, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6, fontFamily: FONT }}>Your next move: {dimensionLabels[weakest]}</div>
           <p style={{ fontSize: 13, color: C.dim, margin: 0, lineHeight: 1.7, fontFamily: FONT }}>{dimensionTips[weakest]}</p>
         </div>
       )}
@@ -179,7 +179,7 @@ function DimensionBreakdown(props) {
 
 function TrendChart(props) {
   var snapshots = props.snapshots || []
-  if (snapshots.length < 2) { return (<Card><Label>Your Confidence Over Time</Label><p style={{ fontSize: 13, color: C.dim, margin: "16px 0 0", lineHeight: 1.7, fontFamily: FONT }}>Your trend line will appear after a few check-ins. Each day you show up adds a data point — and the pattern tells the real story.</p></Card>) }
+  if (snapshots.length < 2) { return (<Card><Label>Your Confidence Over Time</Label><p style={{ fontSize: 13, color: C.dim, margin: "16px 0 0", lineHeight: 1.7, fontFamily: FONT }}>Your trend line will appear after a few check-ins. Each day you show up adds a data point, and the pattern tells the real story.</p></Card>) }
   var chartData = snapshots.map(function (s) { var d = new Date(s.computed_at); return { label: (d.getMonth() + 1) + "/" + d.getDate(), fcs: Math.round(s.fcs_composite * 10) / 10 } })
   var avg = Math.round(chartData.reduce(function (a, b) { return a + b.fcs }, 0) / chartData.length * 10) / 10
   return (
@@ -208,9 +208,9 @@ function TrendChart(props) {
 function GraceAICard(props) {
   var navigate = props.navigate; var score = props.score; var weakest = props.weakestDim; var isMobile = props.isMobile
   var insight = ""
-  if (score != null && score >= 70) { insight = "Your FCS is " + score.toFixed(1) + " — that's strong. Let's talk about what to optimize next." }
-  else if (score != null && score >= 40) { insight = "Your FCS is " + score.toFixed(1) + " — you're building real awareness. I can help you understand what's driving your score." }
-  else if (score != null && score > 0) { insight = "Your FCS is " + score.toFixed(1) + " — this is your starting point. Let's figure out the highest-impact move you can make." }
+  if (score != null && score >= 70) { insight = "Your FCS is " + score.toFixed(1) + ". That's strong. Let's talk about what to optimize next." }
+  else if (score != null && score >= 40) { insight = "Your FCS is " + score.toFixed(1) + ". You're building real awareness. I can help you understand what's driving your score." }
+  else if (score != null && score > 0) { insight = "Your FCS is " + score.toFixed(1) + ". This is your starting point. Let's figure out the highest-impact move you can make." }
   else { insight = "Complete a check-in and I'll have personalized insights based on your financial profile." }
   if (weakest && dimensionLabels[weakest]) { insight += " Your " + dimensionLabels[weakest].toLowerCase() + " could use some attention." }
 
@@ -235,7 +235,7 @@ function GraceAICard(props) {
       <button onClick={function () { navigate("/grace") }} style={{ width: "100%", padding: isMobile ? "14px" : "12px", borderRadius: 8, border: "none", background: "#ffffff", color: "#000000", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: "pointer", transition: "opacity 0.2s ease", letterSpacing: "-0.01em" }}
         onMouseEnter={function (e) { e.target.style.opacity = "0.85" }} onMouseLeave={function (e) { e.target.style.opacity = "1" }}
       >Talk to Grace</button>
-      <p style={{ fontSize: 11, color: C.dim, textAlign: "center", margin: "12px 0 0", fontFamily: FONT }}>Behavioral coaching — not financial advice.</p>
+      <p style={{ fontSize: 11, color: C.dim, textAlign: "center", margin: "12px 0 0", fontFamily: FONT }}>Behavioral coaching, not financial advice.</p>
     </Card>
   )
 }
@@ -261,12 +261,14 @@ export default function DashboardPage() {
   var s = snapshotData; var currentFCS = s ? s.fcs_total : null; var fcsTrend = s ? s.delta_vs_last : null
   var checkinCount = s ? s.checkins_this_week : null; var streak = s ? s.streak_count : null
   var dims = s && s.dimensions ? s.dimensions : {}
+
+  // Backend returns 0.0-1.0 floats. Pass directly — DimensionBreakdown handles ×100.
   var currentMetrics = {
-    current_stability: dims.stability != null ? dims.stability / 100 : null,
-    future_outlook: dims.outlook != null ? dims.outlook / 100 : null,
-    purchasing_power: dims.purchasing_power != null ? dims.purchasing_power / 100 : null,
-    emergency_readiness: dims.emergency_readiness != null ? dims.emergency_readiness / 100 : null,
-    financial_agency: dims.financial_agency != null ? dims.financial_agency / 100 : null,
+    current_stability: dims.stability != null ? dims.stability : null,
+    future_outlook: dims.outlook != null ? dims.outlook : null,
+    purchasing_power: dims.purchasing_power != null ? dims.purchasing_power : null,
+    emergency_readiness: dims.emergency_readiness != null ? dims.emergency_readiness : null,
+    financial_agency: dims.financial_agency != null ? dims.financial_agency : null,
   }
   var weakestDim = null; var weakestVal = 1.0
   Object.keys(currentMetrics).forEach(function (d) { var v = currentMetrics[d]; if (v != null && v < weakestVal) { weakestVal = v; weakestDim = d } })
@@ -305,7 +307,7 @@ export default function DashboardPage() {
         <div style={{ marginBottom: gap }}><DailyCheckin onCheckinComplete={handleCheckinComplete} /></div>
         <div style={{ marginBottom: gap }}><QuickStats score={currentFCS} checkinCount={checkinCount} streak={streak} isMobile={screen.isMobile} /></div>
 
-        {/* Score + Dimensions — stack on mobile */}
+        {/* Score + Dimensions */}
         <div style={{ display: "grid", gridTemplateColumns: screen.isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: gap }}>
           <FCSScore score={currentFCS} trend={fcsTrend} checkinCount={checkinCount} isMobile={screen.isMobile} />
           <DimensionBreakdown metrics={currentMetrics} />
@@ -315,7 +317,7 @@ export default function DashboardPage() {
         <div style={{ marginBottom: 40 }}><GraceAICard navigate={navigate} score={currentFCS} weakestDim={weakestDim} isMobile={screen.isMobile} /></div>
 
         <div style={{ borderTop: "1px solid " + C.border, paddingTop: 20, textAlign: "center" }}>
-          <p style={{ color: C.dim, fontSize: 11, margin: 0, letterSpacing: "0.02em" }}>GraceFinance — Where Financial Confidence Is Measured</p>
+          <p style={{ color: C.dim, fontSize: 11, margin: 0, letterSpacing: "0.02em" }}>GraceFinance. Where Financial Confidence Is Measured.</p>
         </div>
       </div>
     </div>
