@@ -1,9 +1,8 @@
 /**
- * IndexPage — v5 Polish
+ * IndexPage — v5.1 (Audit Complete)
  *
- * GraceFinance Composite Index positioned as a premium financial confidence indicator.
- * Paywall-ready structure. Real-time data display.
- * Hidden dev compute trigger (triple-click the label).
+ * GraceFinance Composite Index with confidence tier badges.
+ * Shows Preview/Beta/Published based on contributor count.
  */
 
 import { useState, useEffect } from "react"
@@ -48,6 +47,31 @@ function Card(props) {
 }
 function Label(props) {
   return (<span style={{ fontSize: 11, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: FONT, ...(props.style || {}) }}>{props.children}</span>)
+}
+
+function ConfidenceBadge(props) {
+  var count = props.userCount || 0
+  var tier = "Preview"
+  var color = C.faint
+  var borderColor = "#333333"
+
+  if (count >= 200) {
+    tier = "Published"
+    color = "#22c55e"
+    borderColor = "#166534"
+  } else if (count >= 50) {
+    tier = "Beta"
+    color = "#eab308"
+    borderColor = "#854d0e"
+  }
+
+  return (
+    <span style={{
+      display: "inline-block", fontSize: 10, fontWeight: 600, color: color,
+      border: "1px solid " + borderColor, borderRadius: 4, padding: "2px 8px",
+      textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: FONT,
+    }}>{tier}</span>
+  )
 }
 
 function Nav(props) {
@@ -173,8 +197,11 @@ export default function IndexPage() {
 
         {/* HERO */}
         <Card style={{ marginBottom: 16, padding: "36px 28px" }}>
-          <div onClick={handleLabelClick} style={{ cursor: "default" }}>
-            <Label>GraceFinance Composite Index</Label>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+            <div onClick={handleLabelClick} style={{ cursor: "default" }}>
+              <Label>GraceFinance Composite Index</Label>
+            </div>
+            <ConfidenceBadge userCount={userCount} />
           </div>
 
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginTop: 20, marginBottom: 8 }}>
@@ -228,6 +255,19 @@ export default function IndexPage() {
             <span>{userCount > 0 ? userCount + " active contributor" + (userCount > 1 ? "s" : "") : ""}</span>
           </div>
         </Card>
+
+        {/* CONFIDENCE TIER EXPLANATION */}
+        {hasData && userCount < 200 && (
+          <Card style={{ marginBottom: 16, padding: "14px 20px" }}>
+            <div style={{ fontSize: 11, fontWeight: 500, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Index Confidence</div>
+            <p style={{ fontSize: 12, color: C.faint, lineHeight: 1.7, margin: 0 }}>
+              {userCount < 50
+                ? "The Composite Index is in Preview mode. With fewer than 50 active contributors, the index is directional only and may not represent broader population confidence. As the user base grows, the signal strengthens."
+                : "The Composite Index is in Beta. With " + userCount + " active contributors, the index provides a meaningful directional signal among engaged GraceFinance users. At 200+ contributors, the index reaches Published status."
+              }
+            </p>
+          </Card>
+        )}
 
         {/* TREND CHART */}
         {chartData.length > 1 ? (
