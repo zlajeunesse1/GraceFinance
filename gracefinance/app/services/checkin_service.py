@@ -503,7 +503,7 @@ def _update_streak(db: Session, user_id, now: datetime) -> None:
         return
 
     current_streak = getattr(user, "current_streak", 0) or 0
-    last_checkin = getattr(user, "last_checkin_date", None)
+    last_checkin = getattr(user, "last_checkin_at", None)
     today = now.date()
 
     if last_checkin is not None:
@@ -517,7 +517,7 @@ def _update_streak(db: Session, user_id, now: datetime) -> None:
     else:
         user.current_streak = 1
 
-    user.last_checkin_date = now
+    user.last_checkin_at = now
     db.commit()
 
 
