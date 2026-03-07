@@ -2,12 +2,13 @@
 Index Router — Grace Financial Confidence Index (GFCI)
 ═══════════════════════════════════════════════════════
 Endpoints:
-  GET  /index/latest       → Current GFCI composite + pillar breakdown
-  GET  /index/history      → GFCI over time for trending
-  POST /index/compute      → Manually trigger index computation (dev/admin)
-  POST /index/reset        → Wipe index data and start fresh (dev only)
-  POST /index/migrate-streak → Add streak columns (run once, then remove)
-  GET  /index/methodology  → Public methodology documentation
+  GET  /index/latest            → Current GFCI composite + pillar breakdown
+  GET  /index/history           → GFCI over time for trending
+  POST /index/compute           → Manually trigger index computation (dev/admin)
+  POST /index/reset             → Wipe index data and start fresh (dev only)
+  POST /index/migrate-streak    → Add streak columns (run once, then remove)
+  POST /index/reset-user-data   → Wipe all test data (dev only)
+  GET  /index/methodology       → Public methodology documentation
 
 Wired to: app/services/gfci_engine.py (v4 institutional engine)
 """
@@ -123,6 +124,21 @@ def reset_index(
     db.query(DailyIndex).delete()
     db.commit()
     return {"message": f"Deleted {count} index rows. Ready for fresh compute."}
+
+
+@router.post("/reset-user-data")
+def reset_user_data(
+    db: Session = Depends(get_db),
+):
+    """Dev tool — wipe all checkin responses, snapshots, index data, and reset streaks."""
+    from app.models.checkin import CheckInResponse, UserMetricSnapshot
+    from sqlalchemy import text
+    r1 = db.query(CheckInResponse).delete()
+    r2 = db.query(UserMetricSnapshot).delete()
+    r3 = db.query(DailyIndex).delete()
+    db.execute(text("UPDATE users SET current_streak = 0, last_checkin_date = NULL"))
+    db.commit()
+    return {"deleted": {"responses": r1, "snapshots": r2, "index_rows": r3}, "streak": "reset to 0"}
 
 
 @router.post("/migrate-streak")
