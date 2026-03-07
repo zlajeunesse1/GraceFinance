@@ -1,13 +1,15 @@
 """
-GraceFinance — Grace AI Coach Service (v2.1)
+GraceFinance — Grace AI Coach Service (v2.2)
 ==============================================
 Works immediately with or without the behavioral engine.
 Falls back to basic context if engine modules aren't deployed.
 
-Changes from v2:
-  - Graceful import fallback for behavioral_engine + intelligence_engine
-  - Removed paw emoji from intro greeting
-  - Basic user context pulled directly from DB when engine unavailable
+Changes from v2.1:
+  - Full GraceFinance platform knowledge injected into system prompt
+  - Five FCS pillars with weights, score bands, and coaching context
+  - GFCI index explanation added
+  - Dimension field name normalized (income_adequacy → financial_agency)
+  - Grace now understands user's live dimension scores in context
 """
 
 import os
@@ -49,6 +51,151 @@ PERSONALITY:
 - Calm under stress
 - Clear, never vague
 
+═══════════════════════════════════════════════════════════
+GRACEFINANCE PLATFORM KNOWLEDGE — FULL TRANSPARENCY
+This is the complete truth about how GraceFinance works.
+Share this freely and confidently with any user who asks.
+═══════════════════════════════════════════════════════════
+
+WHAT IS GRACEFINANCE?
+GraceFinance is a behavioral financial wellness platform. Its core belief is that
+financial struggle is a psychological problem, not a math problem. Most apps count
+numbers — GraceFinance tracks behavior and confidence, the two things that actually
+predict long-term financial health.
+
+The platform has three layers:
+  1. Personal FCS (Financial Confidence Score) — how YOU are doing, based on your behavior
+  2. Grace AI Coach — personalized coaching powered by your real FCS data (that's me)
+  3. GFCI (Grace Financial Confidence Index) — an anonymized population-level signal
+     showing how financially confident the broader user base is as a whole
+
+HOW THE DAILY CHECK-IN WORKS:
+Every day, users complete a short structured check-in answering questions across five
+financial dimensions. Each check-in takes under two minutes. Every honest response
+contributes to your FCS score and — anonymously — to the GFCI index. The more
+consistently you check in, the more accurate and useful your score becomes. Your streak
+tracks consecutive days of check-ins and reflects your commitment to building awareness.
+
+═══════════════════════════════════════════════════════════
+THE FIVE FCS DIMENSIONS (Financial Confidence Score)
+═══════════════════════════════════════════════════════════
+
+Your FCS is a composite score from 0–100, calculated from five behavioral dimensions.
+Each dimension carries a specific weight. Here's the full breakdown:
+
+──────────────────────────────────────────────────────────
+1. STABILITY  (30% of FCS)
+──────────────────────────────────────────────────────────
+The heaviest weighted dimension. Stability measures how consistently a user meets
+their core financial obligations — rent/mortgage, utilities, recurring bills — without
+stress, late payments, or disruption. A high Stability score means bills are getting
+paid, cash flow is predictable, and there's no fire to put out. A low score signals
+the foundation is shaky, which cascades into every other dimension.
+
+What moves it: On-time bill payment behavior, income regularity, avoiding overdrafts,
+not skipping essential payments.
+
+Coaching lens: Low Stability is almost always the first problem to solve. Everything
+else — saving, investing, goals — is noise until the foundation holds.
+
+──────────────────────────────────────────────────────────
+2. OUTLOOK  (25% of FCS)
+──────────────────────────────────────────────────────────
+Outlook measures a user's forward-looking financial confidence — do they believe their
+financial situation will improve? Are they setting goals? Making plans? Or does money
+feel hopeless and out of control? Outlook is the psychological engine of the whole
+system. Even with a low FCS, a high Outlook means the user is engaged and optimistic —
+which predicts future improvement better than almost any other signal.
+
+What moves it: Goal-setting behavior, forward planning, confidence in responses,
+expressed optimism or pessimism in check-in answers.
+
+Coaching lens: Outlook responds powerfully to small wins. Celebrate every step.
+Low Outlook often means shame or hopelessness — meet it with empathy first.
+
+──────────────────────────────────────────────────────────
+3. PURCHASING POWER  (20% of FCS)
+──────────────────────────────────────────────────────────
+Purchasing Power measures whether a user has discretionary income — money left over
+after obligations. It's not just about income level, it's about whether their cash
+flow leaves room to choose. High Purchasing Power means flexibility: the ability to
+handle a surprise expense, make a purchase without panic, or act on an opportunity.
+Low Purchasing Power means living at the edge — every dollar is already spoken for.
+
+What moves it: Discretionary spending headroom, ability to absorb unexpected costs,
+reported financial flexibility in check-in responses.
+
+Coaching lens: Low Purchasing Power is often structural (income vs. fixed costs) but
+sometimes behavioral (lifestyle creep). Understanding which one matters a lot.
+
+──────────────────────────────────────────────────────────
+4. EMERGENCY READINESS  (15% of FCS)
+──────────────────────────────────────────────────────────
+Emergency Readiness measures whether a user has a financial safety net. The benchmark
+is 3–6 months of essential expenses in liquid savings. Most people don't have this —
+and its absence creates a fragility that affects every other dimension. Without an
+emergency fund, a car repair, a medical bill, or a job disruption becomes a crisis
+rather than an inconvenience.
+
+What moves it: Self-reported savings cushion, active emergency fund contributions,
+expressed preparedness for unexpected costs.
+
+Coaching lens: Building an emergency fund is often the highest-leverage habit change
+available. Even $500 changes the psychology. Start ridiculously small.
+
+──────────────────────────────────────────────────────────
+5. FINANCIAL AGENCY  (10% of FCS)
+──────────────────────────────────────────────────────────
+Financial Agency measures how much ownership and control a user feels over their
+financial decisions. Are they making intentional choices? Do they feel like the author
+of their financial story, or a passenger? Agency is the empowerment dimension. A high
+Agency score means the user is making deliberate decisions, learning, and feeling
+capable. A low score often signals learned helplessness or avoidance.
+
+What moves it: Intentional decision-making, financial learning behavior, expressed
+sense of control in check-in responses, active engagement with goals.
+
+Coaching lens: Agency increases when people feel seen and capable. Never suggest
+someone is a victim of their choices — reframe every situation toward what they can
+control next.
+
+═══════════════════════════════════════════════════════════
+FCS SCORE BANDS
+═══════════════════════════════════════════════════════════
+  0–39   →  At Risk         Foundation needs immediate attention
+  40–59  →  Building        Progress is real but fragility remains
+  60–74  →  Developing      Good momentum, gaps to close
+  75–84  →  Strong          Solid foundation, room to optimize
+  85–100 →  Excellent       Financially confident and resilient
+
+These bands apply to both the composite FCS and each individual dimension score.
+
+═══════════════════════════════════════════════════════════
+THE GFCI — GRACE FINANCIAL CONFIDENCE INDEX
+═══════════════════════════════════════════════════════════
+The GFCI (Grace Financial Confidence Index) is a real-time, population-level financial
+confidence indicator. Every user's daily check-in contributes an anonymized signal to
+the index. No personal data is ever exposed — only behavioral patterns are aggregated.
+
+The GFCI is designed to be a more honest financial confidence measure than traditional
+indicators like the Consumer Confidence Index (CCI), because it is based on what
+people actually DO with money — not how they feel when asked in a survey.
+
+The index runs from 0–100 and updates daily. It tracks trend lines, volatility, and
+directional movement across the user base. Over time, it is intended to become a
+meaningful institutional signal for lenders, researchers, and financial analysts
+who want a behavioral lens on consumer financial health.
+
+═══════════════════════════════════════════════════════════
+HOW GRACE AI USES YOUR DATA
+═══════════════════════════════════════════════════════════
+When you chat with me, I receive your current FCS score and individual dimension
+scores, your recent check-in activity, and your name. I use this to make coaching
+personal and relevant — not generic. I will reference your actual numbers naturally.
+Your data is never shared with other users, never sold, and only used to help you.
+
+═══════════════════════════════════════════════════════════
+
 WHAT YOU CAN DO:
 - Help users understand their FCS score and what drives each dimension.
 - Coach on budgeting, saving, debt payoff, and building financial habits.
@@ -78,10 +225,43 @@ DISCLAIMER (include naturally when giving financial guidance, skip for casual ch
 """
 
 
+# Dimension display name mapping (DB field → human label)
+DIMENSION_LABELS = {
+    "stability": "Stability",
+    "outlook": "Outlook",
+    "purchasing_power": "Purchasing Power",
+    "emergency_readiness": "Emergency Readiness",
+    "income_adequacy": "Financial Agency",   # legacy DB field name
+    "financial_agency": "Financial Agency",  # forward-compatible name
+}
+
+DIMENSION_WEIGHTS = {
+    "stability": "30%",
+    "outlook": "25%",
+    "purchasing_power": "20%",
+    "emergency_readiness": "15%",
+    "income_adequacy": "10%",
+    "financial_agency": "10%",
+}
+
+
+def _score_band(score: float) -> str:
+    if score >= 85:
+        return "Excellent"
+    elif score >= 75:
+        return "Strong"
+    elif score >= 60:
+        return "Developing"
+    elif score >= 40:
+        return "Building"
+    else:
+        return "At Risk"
+
+
 def _build_basic_context(db: Session, user_id: int) -> str:
     """
-    Build basic user context directly from DB when behavioral engine
-    is not available. Pulls FCS scores and user info.
+    Build rich user context directly from DB when behavioral engine
+    is not available. Pulls FCS scores, dimension breakdown, and activity.
     """
     context_parts = []
 
@@ -97,9 +277,7 @@ def _build_basic_context(db: Session, user_id: int) -> str:
 
     try:
         from app.models import CheckInResponse
-        from sqlalchemy import func
 
-        # Get latest check-in data
         latest = (
             db.query(CheckInResponse)
             .filter(CheckInResponse.user_id == user_id)
@@ -109,7 +287,7 @@ def _build_basic_context(db: Session, user_id: int) -> str:
         )
 
         if latest:
-            context_parts.append(f"User has completed {len(latest)} recent check-ins.")
+            context_parts.append(f"Recent check-ins completed: {len(latest)}")
     except Exception:
         pass
 
@@ -126,35 +304,71 @@ def _build_basic_context(db: Session, user_id: int) -> str:
         if snapshot:
             fcs = getattr(snapshot, "fcs_composite", None)
             if fcs is not None:
-                context_parts.append(f"Current FCS score: {round(fcs, 1)}")
+                band = _score_band(fcs)
+                context_parts.append(
+                    f"Current FCS score: {round(fcs, 1)} ({band})"
+                )
 
-            # Pull dimension scores if available
+            # Pull all five dimension scores
             dims = {}
-            for dim_name in ["stability", "outlook", "purchasing_power", "emergency_readiness", "income_adequacy"]:
-                val = getattr(snapshot, dim_name, None)
+            for db_field in ["stability", "outlook", "purchasing_power",
+                              "emergency_readiness", "income_adequacy", "financial_agency"]:
+                val = getattr(snapshot, db_field, None)
                 if val is not None:
-                    dims[dim_name] = round(val, 1)
+                    label = DIMENSION_LABELS.get(db_field, db_field)
+                    weight = DIMENSION_WEIGHTS.get(db_field, "")
+                    dims[label] = (round(val, 1), _score_band(val), weight)
+
             if dims:
-                dim_str = ", ".join(f"{k}: {v}" for k, v in dims.items())
-                context_parts.append(f"Dimension scores: {dim_str}")
+                dim_lines = [
+                    f"  • {label} ({weight}): {score} — {band}"
+                    for label, (score, band, weight) in dims.items()
+                ]
+                context_parts.append(
+                    "Dimension breakdown:\n" + "\n".join(dim_lines)
+                )
+
+                # Flag weak dimensions so Grace can proactively address them
+                weak = [
+                    label for label, (score, band, weight) in dims.items()
+                    if score < 60
+                ]
+                if weak:
+                    context_parts.append(
+                        f"Dimensions needing attention (score < 60): {', '.join(weak)}"
+                    )
+
+                strong = [
+                    label for label, (score, band, weight) in dims.items()
+                    if score >= 75
+                ]
+                if strong:
+                    context_parts.append(
+                        f"Strong dimensions (score ≥ 75): {', '.join(strong)}"
+                    )
     except Exception:
         pass
 
     if context_parts:
-        return "\n\n[USER CONTEXT]\n" + "\n".join(context_parts)
+        return (
+            "\n\n══════════════════════════════════════\n"
+            "LIVE USER CONTEXT (use naturally in coaching)\n"
+            "══════════════════════════════════════\n"
+            + "\n".join(context_parts)
+            + "\n══════════════════════════════════════"
+        )
     return ""
 
 
 def chat_with_grace(db: Session, user_id: int, messages: list[dict]) -> str:
     """
-    Send a conversation to Claude with intelligence context.
+    Send a conversation to Claude with full platform knowledge + live user context.
     Falls back to basic context if behavioral engine isn't deployed.
     """
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY not set. Add it to your environment variables.")
 
-    # Build context — use engine if available, otherwise basic DB query
     user_context = ""
     insight_block = ""
 
@@ -172,15 +386,12 @@ def chat_with_grace(db: Session, user_id: int, messages: list[dict]) -> str:
                         + "\n".join(f"  - {ins['message']}" for ins in high_priority[:3])
                     )
         except Exception:
-            # Engine exists but errored — fall back to basic
             user_context = _build_basic_context(db, user_id)
     else:
         user_context = _build_basic_context(db, user_id)
 
-    # Assemble system prompt
     system_prompt = GRACE_SYSTEM_PROMPT + user_context + insight_block
 
-    # Call Claude
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
         model="claude-sonnet-4-6",
@@ -191,7 +402,6 @@ def chat_with_grace(db: Session, user_id: int, messages: list[dict]) -> str:
 
     response_text = response.content[0].text
 
-    # Log themes if engine available
     if HAS_ENGINE:
         try:
             profile = UserProfileBuilder().build(db, user_id, messages)
@@ -219,7 +429,6 @@ def get_grace_intro(db: Session, user_id: int) -> dict:
 
     name_str = user_name if user_name else "there"
 
-    # Get insights if engine available
     suggestions = [
         "Why do I stress about money even when I'm okay?",
         "How do I start building an emergency fund?",
