@@ -11,20 +11,55 @@
 body {
   font-family: 'DM Sans', system-ui, sans-serif;
   background-color: #0B0F1A;
-  color: #F1F5F9;
+  color: #FFFFFF;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-input::placeholder {
-  color: #475569;
+/* ── Force all text to use solid color rendering ── */
+* {
+  -webkit-text-fill-color: currentColor;
 }
 
+/* ── Only allow gradient text where explicitly opted in ── */
+.gradient-text {
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Muted text hierarchy ── */
+.text-primary   { color: #FFFFFF; }
+.text-secondary { color: #C8D0DC; }
+.text-muted     { color: #8B95A6; }
+.text-subtle    { color: #5A6475; }
+
+/* ── Inputs ── */
+input, textarea, select {
+  color: #FFFFFF;
+  -webkit-font-smoothing: antialiased;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #5A6475;
+  opacity: 1;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0B0F1A; }
+::-webkit-scrollbar-thumb { background: #2A3040; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3A4255; }
+
+/* ── Animations ── */
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
-
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(24px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
