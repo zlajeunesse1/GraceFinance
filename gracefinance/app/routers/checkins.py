@@ -7,6 +7,7 @@ Endpoints:
   GET  /checkin/metrics         → User's FCS metric snapshots over time
   POST /checkin/reset           → Dev tool — clear today's check-in to re-test
   POST /checkin/reset-all       → Dev tool — wipe all check-in data for current user
+  POST /checkin/migrate-v5      → Dev tool — add v5 formula columns
 
 Data quality rule:
   One check-in per user per calendar day (UTC). Enforced at the server level on
@@ -278,6 +279,23 @@ def reset_all_data(
     db.execute(text("UPDATE users SET current_streak = 0, last_checkin_at = NULL WHERE id = :uid"), {"uid": uid})
     db.commit()
     return {"message": "All data reset for your account."}
+
+
+# ──────────────────────────────────────────
+#  DEV: RUN V5 SCHEMA MIGRATION
+#  TEMPORARY — remove after use
+# ──────────────────────────────────────────
+
+@router.post("/migrate-v5")
+def run_v5_migration(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Temporary — add v5 formula columns to user_metric_snapshots."""
+    for col in ["fcs_behavior", "fcs_consistency", "fcs_trend", "fcs_slope_7d", "fcs_slope_30d"]:
+        db.execute(text("ALTER TABLE user_metric_snapshots ADD COLUMN IF NOT EXISTS " + col + " FLOAT"))
+    db.commit()
+    return {"message": "v5 columns added successfully"}
 
 
 # ──────────────────────────────────────────
