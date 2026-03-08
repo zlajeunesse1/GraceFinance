@@ -1,9 +1,7 @@
 /**
- * LoginPage — v6.0
- * CHANGES FROM v5:
- *  - Detects 403 "verify your email" error → shows amber warning + resend button
- *  - Resend verification email from login page
- *  - Forgot password link unchanged (already exists)
+ * LoginPage — v6.1
+ * FIX: Removed FormFields/UnverifiedBanner inner components — caused input focus loss on every keystroke.
+ *      Form JSX is now inlined directly in the render.
  */
 
 import { useState } from 'react'
@@ -28,6 +26,8 @@ export default function LoginPage() {
   var resendLoadingState = useState(false); var resendLoading = resendLoadingState[0]; var setResendLoading = resendLoadingState[1]
   var resendSentState = useState(false); var resendSent = resendSentState[0]; var setResendSent = resendSentState[1]
 
+  var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
+
   function validateEmail(em) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) }
 
   async function handleSubmit(e) {
@@ -41,7 +41,6 @@ export default function LoginPage() {
     try { await login(email, password); navigate('/dashboard') }
     catch (err) {
       var msg = err.message || ''
-      // 403 from backend = unverified email
       if (msg.toLowerCase().includes('verify') || msg.toLowerCase().includes('verif')) {
         setUnverified(true)
       } else {
@@ -64,7 +63,6 @@ export default function LoginPage() {
     finally { setResendLoading(false) }
   }
 
-  var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
   var inputStyle = function (field) {
     return { width: '100%', padding: '14px 0', fontSize: 15, fontFamily: FONT, fontWeight: 400, color: '#ffffff', background: 'transparent', border: 'none', borderBottom: '1px solid ' + (errors[field] ? '#ff4444' : focused === field ? '#ffffff' : '#4b5563'), outline: 'none', transition: 'border-color 0.3s ease', letterSpacing: '0.01em' }
   }
@@ -72,50 +70,44 @@ export default function LoginPage() {
     return { display: 'block', fontSize: 11, fontWeight: 500, color: errors[field] ? '#ff4444' : '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, fontFamily: FONT }
   }
 
-  function UnverifiedBanner() {
-    return (
-      <div style={{ marginBottom: 20, padding: '14px 16px', border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.06)', borderRadius: 8 }}>
-        <p style={{ fontSize: 13, color: '#f59e0b', margin: '0 0 8px', fontWeight: 600 }}>Email not verified</p>
-        <p style={{ fontSize: 12, color: '#9ca3af', margin: '0 0 12px', lineHeight: 1.6 }}>
-          Check your inbox for a link from support@gracefinance.co. It may be in spam.
-        </p>
-        {resendSent
-          ? <p style={{ fontSize: 12, color: '#10b981', margin: 0, fontWeight: 600 }}>✓ New link sent — check your inbox</p>
-          : <button onClick={handleResend} disabled={resendLoading} style={{ background: 'transparent', border: '1px solid #333333', borderRadius: 6, padding: '7px 14px', color: '#ffffff', fontSize: 12, fontWeight: 500, fontFamily: FONT, cursor: resendLoading ? 'wait' : 'pointer', opacity: resendLoading ? 0.5 : 1 }}>
-            {resendLoading ? 'Sending...' : 'Resend verification email'}
-          </button>
-        }
-      </div>
-    )
-  }
-
-  function FormFields() {
-    return (
-      <>
-        {unverified && <UnverifiedBanner />}
-        {apiError && !unverified && (<div style={{ marginBottom: 20, padding: '12px 16px', border: '1px solid #331111', background: '#1a0a0a', borderRadius: 8, fontSize: 13, color: '#ff4444' }}>{apiError}</div>)}
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 24 }}>
-            <label style={labelStyle('email')}>Email {errors.email && ': ' + errors.email}</label>
-            <input type="email" value={email} onChange={function (e) { setEmail(e.target.value) }} onFocus={function () { setFocused('email') }} onBlur={function () { setFocused(null) }} placeholder="you@example.com" style={inputStyle('email')} />
-          </div>
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle('password')}>Password {errors.password && ': ' + errors.password}</label>
-            <input type="password" value={password} onChange={function (e) { setPassword(e.target.value) }} onFocus={function () { setFocused('password') }} onBlur={function () { setFocused(null) }} placeholder="Enter password" style={inputStyle('password')} />
-          </div>
-          <div style={{ textAlign: 'right', marginBottom: 28 }}>
-            <Link to="/forgot-password" style={{ fontSize: 12, color: '#6b7280', textDecoration: 'none' }}>Forgot password?</Link>
-          </div>
-          <button type="submit" disabled={loading} style={{ width: '100%', padding: '14px', fontSize: 14, fontWeight: 600, fontFamily: FONT, color: '#000000', background: '#ffffff', border: 'none', borderRadius: 8, cursor: loading ? 'wait' : 'pointer', letterSpacing: '-0.01em', transition: 'opacity 0.2s ease', opacity: loading ? 0.6 : 1 }}
-            onMouseEnter={function (e) { if (!loading) e.target.style.opacity = '0.85' }} onMouseLeave={function (e) { if (!loading) e.target.style.opacity = '1' }}
-          >{loading ? 'Signing in...' : 'Sign In'}</button>
-        </form>
-        <p style={{ textAlign: 'center', marginTop: 32, fontSize: 13, color: '#6b7280' }}>
-          New here?{' '}<Link to="/signup" style={{ color: '#ffffff', fontWeight: 500, textDecoration: 'none' }}>Create your account</Link>
-        </p>
-      </>
-    )
-  }
+  var formJSX = (
+    <>
+      {unverified && (
+        <div style={{ marginBottom: 20, padding: '14px 16px', border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.06)', borderRadius: 8 }}>
+          <p style={{ fontSize: 13, color: '#f59e0b', margin: '0 0 8px', fontWeight: 600 }}>Email not verified</p>
+          <p style={{ fontSize: 12, color: '#9ca3af', margin: '0 0 12px', lineHeight: 1.6 }}>Check your inbox for a link from support@gracefinance.co. It may be in spam.</p>
+          {resendSent
+            ? <p style={{ fontSize: 12, color: '#10b981', margin: 0, fontWeight: 600 }}>✓ New link sent — check your inbox</p>
+            : <button onClick={handleResend} disabled={resendLoading} style={{ background: 'transparent', border: '1px solid #333333', borderRadius: 6, padding: '7px 14px', color: '#ffffff', fontSize: 12, fontWeight: 500, fontFamily: FONT, cursor: resendLoading ? 'wait' : 'pointer', opacity: resendLoading ? 0.5 : 1 }}>
+              {resendLoading ? 'Sending...' : 'Resend verification email'}
+            </button>
+          }
+        </div>
+      )}
+      {apiError && !unverified && (<div style={{ marginBottom: 20, padding: '12px 16px', border: '1px solid #331111', background: '#1a0a0a', borderRadius: 8, fontSize: 13, color: '#ff4444' }}>{apiError}</div>)}
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: 24 }}>
+          <label style={labelStyle('email')}>Email {errors.email && ': ' + errors.email}</label>
+          <input type="email" value={email} onChange={function (e) { setEmail(e.target.value) }} onFocus={function () { setFocused('email') }} onBlur={function () { setFocused(null) }} placeholder="you@example.com" style={inputStyle('email')} />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle('password')}>Password {errors.password && ': ' + errors.password}</label>
+          <input type="password" value={password} onChange={function (e) { setPassword(e.target.value) }} onFocus={function () { setFocused('password') }} onBlur={function () { setFocused(null) }} placeholder="Enter password" style={inputStyle('password')} />
+        </div>
+        <div style={{ textAlign: 'right', marginBottom: 28 }}>
+          <Link to="/forgot-password" style={{ fontSize: 12, color: '#6b7280', textDecoration: 'none' }}>Forgot password?</Link>
+        </div>
+        <button type="submit" disabled={loading}
+          style={{ width: '100%', padding: '14px', fontSize: 14, fontWeight: 600, fontFamily: FONT, color: '#000000', background: '#ffffff', border: 'none', borderRadius: 8, cursor: loading ? 'wait' : 'pointer', letterSpacing: '-0.01em', transition: 'opacity 0.2s ease', opacity: loading ? 0.6 : 1 }}
+          onMouseEnter={function (e) { if (!loading) e.target.style.opacity = '0.85' }}
+          onMouseLeave={function (e) { if (!loading) e.target.style.opacity = '1' }}
+        >{loading ? 'Signing in...' : 'Sign In'}</button>
+      </form>
+      <p style={{ textAlign: 'center', marginTop: 32, fontSize: 13, color: '#6b7280' }}>
+        New here?{' '}<Link to="/signup" style={{ color: '#ffffff', fontWeight: 500, textDecoration: 'none' }}>Create your account</Link>
+      </p>
+    </>
+  )
 
   if (screen.isMobile || screen.isTablet) {
     return (
@@ -126,13 +118,11 @@ export default function LoginPage() {
             <div style={{ width: 28, height: 28, border: '1.5px solid #ffffff', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#ffffff' }}>G</div>
             <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff', letterSpacing: '-0.02em' }}>GraceFinance</span>
           </div>
-          <h1 style={{ fontSize: 32, fontWeight: 300, color: '#ffffff', lineHeight: 1.15, letterSpacing: '-0.03em', margin: '0 0 12px' }}>
-            Welcome <span style={{ fontWeight: 600 }}>back.</span>
-          </h1>
+          <h1 style={{ fontSize: 32, fontWeight: 300, color: '#ffffff', lineHeight: 1.15, letterSpacing: '-0.03em', margin: '0 0 12px' }}>Welcome <span style={{ fontWeight: 600 }}>back.</span></h1>
           <p style={{ fontSize: 14, color: '#9ca3af', lineHeight: 1.6, margin: 0 }}>Your Financial Confidence Score is waiting.</p>
         </div>
         <div style={{ flex: 1, padding: '16px 24px 40px' }}>
-          <FormFields />
+          {formJSX}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 40, paddingTop: 20, borderTop: '1px solid #1a1a1a' }}>
             {[{ num: '5', label: 'Dimensions' }, { num: '< 2min', label: 'Check-in' }, { num: '24/7', label: 'AI Coach' }].map(function (stat) {
               return (<div key={stat.label} style={{ textAlign: 'center' }}>
@@ -174,7 +164,7 @@ export default function LoginPage() {
             <h2 style={{ fontSize: 24, fontWeight: 600, color: '#ffffff', margin: '0 0 8px', letterSpacing: '-0.02em' }}>Sign in</h2>
             <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>Continue tracking your financial confidence.</p>
           </div>
-          <FormFields />
+          {formJSX}
         </div>
       </div>
     </div>

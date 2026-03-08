@@ -1,10 +1,7 @@
 /**
- * SignupPage — v6.0
- * CHANGES FROM v5.1:
- *  - Added date_of_birth field (18+ enforced client + server side)
- *  - Post-signup "check your inbox" screen instead of redirect
- *  - Resend verification email button
- *  - signup() now passes dob as 4th arg — update AuthContext accordingly
+ * SignupPage — v6.1
+ * FIX: Removed FormFields/TermsCheckbox inner components — caused input focus loss on every keystroke.
+ *      Form JSX is now inlined directly in the render.
  */
 
 import { useState } from 'react'
@@ -32,6 +29,8 @@ export default function SignupPage() {
   var resendLoadingState = useState(false); var resendLoading = resendLoadingState[0]; var setResendLoading = resendLoadingState[1]
   var resendSentState = useState(false); var resendSent = resendSentState[0]; var setResendSent = resendSentState[1]
 
+  var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
+
   function validateEmail(em) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) }
 
   function calculateAge(dobStr) {
@@ -57,7 +56,6 @@ export default function SignupPage() {
     setErrors(errs); if (Object.keys(errs).length > 0) return
     setLoading(true)
     try {
-      // dob passed as 4th arg — update AuthContext.signup to forward date_of_birth to API
       await signup(name, email, password, dob)
       setVerifyPending(true)
     }
@@ -78,14 +76,12 @@ export default function SignupPage() {
     finally { setResendLoading(false) }
   }
 
-  var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
   var inputStyle = function (field) {
     return { width: '100%', padding: '14px 0', fontSize: 15, fontFamily: FONT, fontWeight: 400, color: '#ffffff', background: 'transparent', border: 'none', borderBottom: '1px solid ' + (errors[field] ? '#ff4444' : focused === field ? '#ffffff' : '#4b5563'), outline: 'none', transition: 'border-color 0.3s ease', letterSpacing: '0.01em' }
   }
   var labelStyle = function (field) {
     return { display: 'block', fontSize: 11, fontWeight: 500, color: errors[field] ? '#ff4444' : '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, fontFamily: FONT }
   }
-  var linkStyle = { color: '#9ca3af', textDecoration: 'underline', textUnderlineOffset: '2px' }
 
   // ── Post-signup verify screen ─────────────────────────────────────────────
   if (verifyPending) {
@@ -93,7 +89,7 @@ export default function SignupPage() {
       <div style={{ minHeight: '100vh', background: '#000000', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
         <style>{"@import url('https://fonts.cdnfonts.com/css/geist');"}</style>
         <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
-          <div style={{ width: 48, height: 48, border: '1.5px solid #ffffff', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: '#ffffff', margin: '0 auto 32px', lineHeight: '48px' }}>G</div>
+          <div style={{ width: 48, height: 48, border: '1.5px solid #ffffff', borderRadius: 12, lineHeight: '48px', fontSize: 20, fontWeight: 700, color: '#ffffff', margin: '0 auto 32px', textAlign: 'center' }}>G</div>
           <h2 style={{ fontSize: 26, fontWeight: 600, color: '#ffffff', margin: '0 0 12px', letterSpacing: '-0.03em' }}>Check your inbox</h2>
           <p style={{ fontSize: 14, color: '#9ca3af', lineHeight: 1.7, margin: '0 0 6px' }}>We sent a verification link to</p>
           <p style={{ fontSize: 14, color: '#ffffff', fontWeight: 600, margin: '0 0 28px' }}>{email}</p>
@@ -113,59 +109,52 @@ export default function SignupPage() {
     )
   }
 
-  function TermsCheckbox() {
-    return (
-      <div style={{ marginBottom: 24 }}>
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-          <input type="checkbox" checked={agreed}
-            onChange={function (e) { setAgreed(e.target.checked); if (e.target.checked) { setErrors(function (prev) { var next = Object.assign({}, prev); delete next.agreed; return next }) } }}
-            style={{ width: 16, height: 16, marginTop: 2, accentColor: '#ffffff', cursor: 'pointer', flexShrink: 0 }}
-          />
-          <span style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5, fontFamily: FONT }}>
-            I agree to the{' '}
-            <a href="/legal/terms" target="_blank" rel="noopener noreferrer" style={linkStyle}>Terms of Service</a>
-            {' '}and{' '}
-            <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" style={linkStyle}>Privacy Policy</a>
-          </span>
-        </label>
-        {errors.agreed && (<div style={{ fontSize: 11, color: '#ff4444', marginTop: 6, marginLeft: 26, fontFamily: FONT }}>{errors.agreed}</div>)}
-      </div>
-    )
-  }
-
-  function FormFields() {
-    return (
-      <>
-        {apiError && (<div style={{ marginBottom: 20, padding: '12px 16px', border: '1px solid #331111', background: '#1a0a0a', borderRadius: 8, fontSize: 13, color: '#ff4444' }}>{apiError}</div>)}
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 22 }}>
-            <label style={labelStyle('name')}>Full Name {errors.name && ': ' + errors.name}</label>
-            <input type="text" value={name} onChange={function (e) { setName(e.target.value) }} onFocus={function () { setFocused('name') }} onBlur={function () { setFocused(null) }} placeholder="Your name" style={inputStyle('name')} />
-          </div>
-          <div style={{ marginBottom: 22 }}>
-            <label style={labelStyle('email')}>Email {errors.email && ': ' + errors.email}</label>
-            <input type="email" value={email} onChange={function (e) { setEmail(e.target.value) }} onFocus={function () { setFocused('email') }} onBlur={function () { setFocused(null) }} placeholder="you@example.com" style={inputStyle('email')} />
-          </div>
-          <div style={{ marginBottom: 22 }}>
-            <label style={labelStyle('password')}>Password {errors.password && ': ' + errors.password}</label>
-            <input type="password" value={password} onChange={function (e) { setPassword(e.target.value) }} onFocus={function () { setFocused('password') }} onBlur={function () { setFocused(null) }} placeholder="Min 8 characters" style={inputStyle('password')} />
-          </div>
-          <div style={{ marginBottom: 24 }}>
-            <label style={labelStyle('dob')}>Date of Birth {errors.dob && ': ' + errors.dob}</label>
-            <input type="date" value={dob} onChange={function (e) { setDob(e.target.value) }} onFocus={function () { setFocused('dob') }} onBlur={function () { setFocused(null) }} style={{ ...inputStyle('dob'), colorScheme: 'dark' }} />
-            <div style={{ fontSize: 11, color: '#4b5563', marginTop: 4, fontFamily: FONT }}>Must be 18 or older</div>
-          </div>
-          <TermsCheckbox />
-          <button type="submit" disabled={loading} style={{ width: '100%', padding: '14px', fontSize: 14, fontWeight: 600, fontFamily: FONT, color: '#000000', background: '#ffffff', border: 'none', borderRadius: 8, cursor: loading ? 'wait' : 'pointer', letterSpacing: '-0.01em', transition: 'opacity 0.2s ease', opacity: loading ? 0.6 : 1 }}
-            onMouseEnter={function (e) { if (!loading) e.target.style.opacity = '0.85' }} onMouseLeave={function (e) { if (!loading) e.target.style.opacity = '1' }}
-          >{loading ? 'Creating account...' : 'Get Started'}</button>
-        </form>
-        <p style={{ textAlign: 'center', marginTop: 28, fontSize: 13, color: '#6b7280' }}>
-          Already tracking?{' '}<Link to="/login" style={{ color: '#ffffff', fontWeight: 500, textDecoration: 'none' }}>Sign in</Link>
-        </p>
-      </>
-    )
-  }
+  var formJSX = (
+    <>
+      {apiError && (<div style={{ marginBottom: 20, padding: '12px 16px', border: '1px solid #331111', background: '#1a0a0a', borderRadius: 8, fontSize: 13, color: '#ff4444' }}>{apiError}</div>)}
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: 22 }}>
+          <label style={labelStyle('name')}>Full Name {errors.name && ': ' + errors.name}</label>
+          <input type="text" value={name} onChange={function (e) { setName(e.target.value) }} onFocus={function () { setFocused('name') }} onBlur={function () { setFocused(null) }} placeholder="Your name" style={inputStyle('name')} />
+        </div>
+        <div style={{ marginBottom: 22 }}>
+          <label style={labelStyle('email')}>Email {errors.email && ': ' + errors.email}</label>
+          <input type="email" value={email} onChange={function (e) { setEmail(e.target.value) }} onFocus={function () { setFocused('email') }} onBlur={function () { setFocused(null) }} placeholder="you@example.com" style={inputStyle('email')} />
+        </div>
+        <div style={{ marginBottom: 22 }}>
+          <label style={labelStyle('password')}>Password {errors.password && ': ' + errors.password}</label>
+          <input type="password" value={password} onChange={function (e) { setPassword(e.target.value) }} onFocus={function () { setFocused('password') }} onBlur={function () { setFocused(null) }} placeholder="Min 8 characters" style={inputStyle('password')} />
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <label style={labelStyle('dob')}>Date of Birth {errors.dob && ': ' + errors.dob}</label>
+          <input type="date" value={dob} onChange={function (e) { setDob(e.target.value) }} onFocus={function () { setFocused('dob') }} onBlur={function () { setFocused(null) }} style={{ ...inputStyle('dob'), colorScheme: 'dark' }} />
+          <div style={{ fontSize: 11, color: '#4b5563', marginTop: 4, fontFamily: FONT }}>Must be 18 or older</div>
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={agreed}
+              onChange={function (e) { setAgreed(e.target.checked); if (e.target.checked) { setErrors(function (prev) { var next = Object.assign({}, prev); delete next.agreed; return next }) } }}
+              style={{ width: 16, height: 16, marginTop: 2, accentColor: '#ffffff', cursor: 'pointer', flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5, fontFamily: FONT }}>
+              I agree to the{' '}
+              <a href="/legal/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Terms of Service</a>
+              {' '}and{' '}
+              <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</a>
+            </span>
+          </label>
+          {errors.agreed && (<div style={{ fontSize: 11, color: '#ff4444', marginTop: 6, marginLeft: 26, fontFamily: FONT }}>{errors.agreed}</div>)}
+        </div>
+        <button type="submit" disabled={loading}
+          style={{ width: '100%', padding: '14px', fontSize: 14, fontWeight: 600, fontFamily: FONT, color: '#000000', background: '#ffffff', border: 'none', borderRadius: 8, cursor: loading ? 'wait' : 'pointer', letterSpacing: '-0.01em', transition: 'opacity 0.2s ease', opacity: loading ? 0.6 : 1 }}
+          onMouseEnter={function (e) { if (!loading) e.target.style.opacity = '0.85' }}
+          onMouseLeave={function (e) { if (!loading) e.target.style.opacity = '1' }}
+        >{loading ? 'Creating account...' : 'Get Started'}</button>
+      </form>
+      <p style={{ textAlign: 'center', marginTop: 28, fontSize: 13, color: '#6b7280' }}>
+        Already tracking?{' '}<Link to="/login" style={{ color: '#ffffff', fontWeight: 500, textDecoration: 'none' }}>Sign in</Link>
+      </p>
+    </>
+  )
 
   if (screen.isMobile || screen.isTablet) {
     return (
@@ -176,14 +165,12 @@ export default function SignupPage() {
             <div style={{ width: 28, height: 28, border: '1.5px solid #ffffff', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#ffffff' }}>G</div>
             <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff', letterSpacing: '-0.02em' }}>GraceFinance</span>
           </div>
-          <h1 style={{ fontSize: 28, fontWeight: 300, color: '#ffffff', lineHeight: 1.2, letterSpacing: '-0.03em', margin: '0 0 10px' }}>
-            Know your <span style={{ fontWeight: 600 }}>financial confidence.</span>
-          </h1>
+          <h1 style={{ fontSize: 28, fontWeight: 300, color: '#ffffff', lineHeight: 1.2, letterSpacing: '-0.03em', margin: '0 0 10px' }}>Know your <span style={{ fontWeight: 600 }}>financial confidence.</span></h1>
           <p style={{ fontSize: 13, color: '#9ca3af', lineHeight: 1.6, margin: 0 }}>Your FCS measures how you interact with money, daily.</p>
         </div>
         <div style={{ flex: 1, padding: '8px 24px 40px' }}>
           <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 20px' }}>Know your Financial Confidence Score in minutes.</p>
-          <FormFields />
+          {formJSX}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 36, paddingTop: 20, borderTop: '1px solid #1a1a1a' }}>
             {[{ num: '5', label: 'Dimensions' }, { num: '< 2min', label: 'Check-in' }, { num: '24/7', label: 'AI Coach' }].map(function (stat) {
               return (<div key={stat.label} style={{ textAlign: 'center' }}>
@@ -225,7 +212,7 @@ export default function SignupPage() {
             <h2 style={{ fontSize: 24, fontWeight: 600, color: '#ffffff', margin: '0 0 8px', letterSpacing: '-0.02em' }}>Create your account</h2>
             <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>Know your Financial Confidence Score in minutes.</p>
           </div>
-          <FormFields />
+          {formJSX}
         </div>
       </div>
     </div>
