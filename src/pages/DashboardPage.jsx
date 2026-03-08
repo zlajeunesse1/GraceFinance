@@ -1,10 +1,6 @@
 /**
- * DashboardPage — v5.2
- * FIXES:
- *   - Removed inline onboarding check (was fighting App.jsx guard)
- *   - Removed isOnboarded localStorage state entirely
- *   - Streak now reads from user object as fallback if metrics haven't loaded
- *   - loadDashboardData refetches user streak from /auth/me on mount
+ * DashboardPage — v5.3
+ * ADDED: UpgradeBanner component — visible top of dashboard, tier-aware
  */
 
 import { useState, useEffect } from "react"
@@ -62,6 +58,140 @@ function AnimatedNumber(props) {
   var s = useState(0); var display = s[0]; var setDisplay = s[1]
   useEffect(function () { var start = Date.now(); function animate() { var elapsed = Date.now() - start; var progress = Math.min(elapsed / 800, 1); var eased = 1 - Math.pow(1 - progress, 3); setDisplay(val * eased); if (progress < 1) requestAnimationFrame(animate) }; animate() }, [val])
   return <span>{decimals > 0 ? display.toFixed(decimals) : Math.round(display)}</span>
+}
+
+/* ══════════════════════════════════════════
+   UPGRADE BANNER
+   ══════════════════════════════════════════ */
+function UpgradeBanner(props) {
+  var navigate = props.navigate
+  var user = props.user
+  var isMobile = props.isMobile
+
+  var tier = (user && user.subscription_tier ? user.subscription_tier : "free").toLowerCase()
+  var used = (user && user.ai_messages_used) ? user.ai_messages_used : 0
+  var limit = tier === "free" ? 10 : tier === "pro" ? 100 : null
+  var remaining = limit !== null ? Math.max(0, limit - used) : null
+  var usagePct = limit !== null ? (used / limit) * 100 : 0
+
+  // Premium — show subtle status bar, no upgrade prompt
+  if (tier === "premium") {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "12px 18px", marginBottom: 20,
+        background: C.card, border: "1px solid " + C.border, borderRadius: 10,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} />
+          <span style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>
+            GracePremium — Unlimited Grace AI
+          </span>
+        </div>
+        <span style={{ fontSize: 11, color: C.faint, fontFamily: FONT }}>Active</span>
+      </div>
+    )
+  }
+
+  // Pro — show usage meter, upgrade to premium CTA
+  if (tier === "pro") {
+    var proColor = usagePct >= 90 ? "#ef4444" : usagePct >= 70 ? "#f59e0b" : "#10b981"
+    return (
+      <div style={{
+        padding: isMobile ? "14px 16px" : "16px 20px", marginBottom: 20,
+        background: C.card, border: "1px solid " + C.border, borderRadius: 10,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#ffffff" }} />
+            <span style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>GracePro</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 11, color: proColor, fontFamily: FONT, fontWeight: 600 }}>
+              {remaining} AI messages left
+            </span>
+            <button
+              onClick={function () { navigate("/upgrade") }}
+              style={{ background: "transparent", border: "1px solid " + C.border, borderRadius: 6, padding: "5px 12px", color: C.muted, fontSize: 11, fontWeight: 600, fontFamily: FONT, cursor: "pointer" }}
+              onMouseEnter={function (e) { e.target.style.borderColor = C.faint; e.target.style.color = C.text }}
+              onMouseLeave={function (e) { e.target.style.borderColor = C.border; e.target.style.color = C.muted }}
+            >
+              Go Premium
+            </button>
+          </div>
+        </div>
+        <div style={{ height: 3, background: C.border, borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: usagePct + "%", background: proColor, borderRadius: 3, transition: "width 0.5s ease" }} />
+        </div>
+      </div>
+    )
+  }
+
+  // Free — prominent upgrade banner
+  var freeColor = usagePct >= 100 ? "#ef4444" : usagePct >= 70 ? "#f59e0b" : C.text
+  var isLimitHit = usagePct >= 100
+
+  return (
+    <div style={{
+      padding: isMobile ? "16px" : "18px 22px", marginBottom: 20,
+      background: isLimitHit ? "rgba(239,68,68,0.05)" : C.card,
+      border: "1px solid " + (isLimitHit ? "rgba(239,68,68,0.25)" : C.border),
+      borderRadius: 10,
+    }}>
+      <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", justifyContent: "space-between", gap: 16, flexDirection: isMobile ? "column" : "row" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.text, fontFamily: FONT }}>
+              {isLimitHit ? "⚠ Grace AI limit reached" : "Free Plan"}
+            </span>
+            <span style={{
+              fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20,
+              background: isLimitHit ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.06)",
+              color: isLimitHit ? "#ef4444" : C.muted,
+              border: "1px solid " + (isLimitHit ? "rgba(239,68,68,0.3)" : C.border),
+              fontFamily: FONT, textTransform: "uppercase", letterSpacing: "0.06em",
+            }}>
+              {isLimitHit ? "Upgrade to unlock" : used + "/" + limit + " AI messages used"}
+            </span>
+          </div>
+          <p style={{ fontSize: 12, color: C.dim, margin: 0, lineHeight: 1.6, fontFamily: FONT }}>
+            {isLimitHit
+              ? "You've used all your free Grace AI messages this month. Upgrade to Pro for 100/month or Premium for unlimited."
+              : "Upgrade to Pro for 100 Grace AI messages/month and faster FCS updates. Premium unlocks unlimited coaching."}
+          </p>
+          {/* Usage bar */}
+          {limit !== null && (
+            <div style={{ marginTop: 10, height: 3, background: C.border, borderRadius: 3, overflow: "hidden", maxWidth: 240 }}>
+              <div style={{ height: "100%", width: Math.min(usagePct, 100) + "%", background: freeColor, borderRadius: 3, transition: "width 0.5s ease" }} />
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexShrink: 0, flexDirection: isMobile ? "row" : "column", alignItems: isMobile ? "center" : "flex-end" }}>
+          <button
+            onClick={function () { navigate("/upgrade") }}
+            style={{
+              padding: isMobile ? "10px 18px" : "10px 20px",
+              borderRadius: 7, border: "none",
+              background: "#ffffff", color: "#000000",
+              fontSize: 13, fontWeight: 700, fontFamily: FONT,
+              cursor: "pointer", whiteSpace: "nowrap",
+              transition: "opacity 0.2s",
+            }}
+            onMouseEnter={function (e) { e.target.style.opacity = "0.85" }}
+            onMouseLeave={function (e) { e.target.style.opacity = "1" }}
+          >
+            See Plans
+          </button>
+          {!isMobile && (
+            <span style={{ fontSize: 10, color: C.faint, fontFamily: FONT, textAlign: "right" }}>
+              Cancel anytime
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function Nav(props) {
@@ -123,11 +253,8 @@ function FCSScore(props) {
 
 function QuickStats(props) {
   var score = props.score; var checkins = props.checkinCount; var streak = props.streak; var isMobile = props.isMobile
-
-  // Format streak display — always show the real number, never stale
   var streakDisplay = (streak != null && streak > 0) ? streak + "d" : "0d"
   var streakSub = (streak != null && streak > 0) ? "day streak 🔥" : "Check in to start"
-
   var stats = [
     { label: "FCS", value: score != null ? score.toFixed(1) : "...", sub: score != null ? getScoreLabel(score) : "Check in to start" },
     { label: "Streak", value: streakDisplay, sub: streakSub },
@@ -231,10 +358,7 @@ function GraceAICard(props) {
       <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.7, margin: "0 0 20px", fontFamily: FONT }}>{insight}</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
         {["What's affecting my score?", "Help me build a plan", "I need to talk about money"].map(function (prompt, i) {
-          return (<button key={i} onClick={function () { navigate("/grace") }} style={{
-            background: "transparent", border: "1px solid " + C.border, borderRadius: 6,
-            padding: isMobile ? "8px 12px" : "6px 12px", color: C.dim, fontSize: 12, fontFamily: FONT, cursor: "pointer", transition: "all 0.2s ease",
-          }}
+          return (<button key={i} onClick={function () { navigate("/grace") }} style={{ background: "transparent", border: "1px solid " + C.border, borderRadius: 6, padding: isMobile ? "8px 12px" : "6px 12px", color: C.dim, fontSize: 12, fontFamily: FONT, cursor: "pointer", transition: "all 0.2s ease" }}
             onMouseEnter={function (e) { e.target.style.borderColor = C.faint; e.target.style.color = C.text }}
             onMouseLeave={function (e) { e.target.style.borderColor = C.border; e.target.style.color = C.dim }}
           >{prompt}</button>)
@@ -259,10 +383,6 @@ export default function DashboardPage() {
   var snapshotState = useState(null); var snapshotData = snapshotState[0]; var setSnapshotData = snapshotState[1]
   var metricsState = useState(null); var metricsData = metricsState[0]; var setMetricsData = metricsState[1]
 
-  // ── REMOVED: isOnboarded / localStorage check
-  // Onboarding is now handled entirely by OnboardingGuard in App.jsx.
-  // If user lands here, they are authenticated and onboarding is complete.
-
   useEffect(function () {
     setMounted(true)
     loadDashboardData()
@@ -279,11 +399,7 @@ export default function DashboardPage() {
   }
 
   function handleCheckinComplete(freshMetrics) {
-    if (freshMetrics) {
-      setSnapshotData(freshMetrics)
-    } else {
-      loadDashboardData()
-    }
+    if (freshMetrics) { setSnapshotData(freshMetrics) } else { loadDashboardData() }
   }
 
   function handleLogout() { logout(); navigate("/login") }
@@ -293,14 +409,7 @@ export default function DashboardPage() {
   var currentFCS = s ? s.fcs_total : null
   var fcsTrend = s ? s.delta_vs_last : null
   var checkinCount = s ? s.checkins_this_week : null
-
-  // ── Streak: read from metrics snapshot, fall back to user object ──────────
-  // s.streak_count comes from /me/metrics (updated on check-in submit)
-  // user.current_streak is the DB value loaded at login — used as fallback
-  var streak = (s && s.streak_count != null)
-    ? s.streak_count
-    : (user && user.current_streak != null ? user.current_streak : null)
-
+  var streak = (s && s.streak_count != null) ? s.streak_count : (user && user.current_streak != null ? user.current_streak : null)
   var dims = s && s.dimensions ? s.dimensions : {}
   var currentMetrics = {
     current_stability: dims.stability != null ? dims.stability : null,
@@ -338,7 +447,12 @@ export default function DashboardPage() {
           </div>
         </div>
         <p style={{ fontSize: 12, color: C.dim, margin: "0 0 " + (screen.isMobile ? "12px" : "20px"), letterSpacing: "0.02em" }}>{dateStr}</p>
+
         <Nav navigate={navigate} active="dashboard" isMobile={screen.isMobile} />
+
+        {/* ── UPGRADE BANNER — always visible, tier-aware ── */}
+        <UpgradeBanner navigate={navigate} user={user} isMobile={screen.isMobile} />
+
         <div style={{ marginBottom: gap }}><DailyCheckin onCheckinComplete={handleCheckinComplete} /></div>
         <div style={{ marginBottom: gap }}><QuickStats score={currentFCS} checkinCount={checkinCount} streak={streak} isMobile={screen.isMobile} /></div>
         <div style={{ display: "grid", gridTemplateColumns: screen.isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: gap }}>
