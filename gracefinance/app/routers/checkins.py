@@ -5,7 +5,7 @@ Endpoints:
   GET  /checkin/questions       → Get today's questions (empty if already checked in today)
   POST /checkin/submit          → Submit answers — enforces ONE check-in per user per day
   GET  /checkin/metrics         → User's FCS metric snapshots over time
-  POST /checkin/reset           → Dev tool — clear today's check-in to re-test
+  POST /checkin/reset           → Dev tool — clear today's check-in (ADMIN ONLY)
   POST /checkin/migrate-v51     → Dev tool — add v5.1 audit columns
 
 Data quality rule:
@@ -41,6 +41,8 @@ from app.routers.me import _build_snapshot
 
 
 router = APIRouter(prefix="/checkin", tags=["Check-In"])
+
+ADMIN_EMAILS = {"zaclajeunesse1@gmail.com"}
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
@@ -226,7 +228,7 @@ def submit_checkin(
 
 
 # ──────────────────────────────────────────
-#  DEV: RESET TODAY'S CHECK-IN
+#  DEV: RESET TODAY'S CHECK-IN (ADMIN ONLY)
 # ──────────────────────────────────────────
 
 @router.post("/reset")
@@ -237,8 +239,14 @@ def reset_today_checkin(
     """
     Dev tool — delete the current user's check-in responses from today (UTC).
     Allows re-testing the check-in flow without waiting for the next day.
-    Only deletes the authenticated user's data — no other users affected.
+    RESTRICTED: Only admin emails can access this endpoint.
     """
+    if user.email not in ADMIN_EMAILS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required.",
+        )
+
     today_start, tomorrow_start = _utc_today_bounds()
 
     deleted = (
