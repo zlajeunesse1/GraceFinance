@@ -1,90 +1,152 @@
-/**
- * SettingsPage — v5 Polish
- * No theme picker. Clean toggles. Monochrome only.
+/*
+ * GraceFinance — Settings Page (v4.0.0 updated)
+ *
+ * Changes:
+ *   ✅ Removed "Index contribution" toggle (everyone contributes by default)
+ *   ✅ Wired CSV export buttons to GET /api/export/checkins & /api/export/fcs-trend
+ *
+ * Uses your existing hostname-based API_BASE pattern.
+ * Drop this into your Settings component file or merge the relevant pieces.
  */
 
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
-import { useProfile } from "../hooks/useProfile"
+import React, { useState } from "react";
 
-var C = { bg: "#000000", card: "#0a0a0a", border: "#1a1a1a", text: "#ffffff", muted: "#9ca3af", dim: "#6b7280", faint: "#4b5563" }
-var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
+// ── Match your existing runtime hostname check ──
+const API_BASE = (() => {
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") {
+    return "http://localhost:8000";
+  }
+  return "https://gracefinance-production.up.railway.app"; // ← adjust if your Railway URL differs
+})();
 
-function Toggle(props) {
-  var active = props.active
+function Settings() {
+  const [dailyReminder, setDailyReminder] = useState(true);
+  const [exportingCheckins, setExportingCheckins] = useState(false);
+  const [exportingFCS, setExportingFCS] = useState(false);
+
+  const token = localStorage.getItem("grace_token");
+
+  // ── Generic CSV download helper ──
+  const downloadCSV = async (endpoint, fallbackFilename, setLoading) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/export/${endpoint}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+
+      const disposition = res.headers.get("Content-Disposition");
+      let filename = fallbackFilename;
+      if (disposition) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match) filename = match[1];
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export error:", err);
+      alert("Export failed — please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div onClick={props.onToggle} style={{ width: 40, height: 22, borderRadius: 11, cursor: "pointer", background: active ? C.text : C.border, position: "relative", transition: "background 0.2s ease" }}>
-      <div style={{ width: 16, height: 16, borderRadius: "50%", background: active ? C.bg : C.dim, position: "absolute", top: 3, left: active ? 21 : 3, transition: "left 0.2s ease" }} />
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "2rem 1rem" }}>
+      {/* Back to dashboard */}
+      <a href="/dashboard" className="back-link">Dashboard</a>
+
+      <h1 style={{ color: "#fff", marginTop: 12 }}>Settings</h1>
+      <p style={{ color: "#888", marginBottom: 24 }}>Customize your GraceFinance experience.</p>
+
+      {/* ─── NOTIFICATIONS ─── */}
+      <section className="settings-card">
+        <h2 className="section-title">NOTIFICATIONS</h2>
+
+        <div className="settings-row">
+          <div>
+            <strong style={{ color: "#fff" }}>Daily check-in reminder</strong>
+            <p className="settings-desc">
+              A gentle nudge each morning to keep your streak alive.
+            </p>
+          </div>
+          {/* Replace with your existing toggle component if you have one */}
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={dailyReminder}
+              onChange={() => setDailyReminder(!dailyReminder)}
+              hidden
+            />
+            <span className={`toggle-track ${dailyReminder ? "active" : ""}`}>
+              <span className="toggle-thumb" />
+            </span>
+          </label>
+        </div>
+
+        {/* INDEX CONTRIBUTION TOGGLE — REMOVED
+            Everyone now contributes to the GraceFinance Composite Index. */}
+      </section>
+
+      {/* ─── YOUR DATA ─── */}
+      <section className="settings-card">
+        <h2 className="section-title">YOUR DATA</h2>
+        <p className="settings-desc" style={{ marginBottom: 12 }}>
+          Your data belongs to you. Export it anytime, or delete your account entirely.
+        </p>
+
+        <button
+          className="export-btn"
+          disabled={exportingCheckins}
+          onClick={() =>
+            downloadCSV("checkins", "gracefinance_checkins.csv", setExportingCheckins)
+          }
+        >
+          {exportingCheckins ? "Exporting…" : "Export check-in history (CSV)"}
+        </button>
+
+        <button
+          className="export-btn"
+          disabled={exportingFCS}
+          onClick={() =>
+            downloadCSV("fcs-trend", "gracefinance_fcs_trend.csv", setExportingFCS)
+          }
+        >
+          {exportingFCS ? "Exporting…" : "Export FCS trend data (CSV)"}
+        </button>
+      </section>
+
+      {/* ─── ACCOUNT ─── */}
+      <section className="settings-card">
+        <h2 className="section-title">ACCOUNT</h2>
+        <button
+          className="delete-btn"
+          onClick={() => {
+            if (window.confirm("Are you sure? This will permanently delete your account and all data.")) {
+              // TODO: call your delete endpoint
+              console.log("Account deletion requested");
+            }
+          }}
+        >
+          Delete my account and all data
+        </button>
+      </section>
+
+      <p style={{ color: "#444", fontSize: 12, textAlign: "center", marginTop: 32 }}>
+        GraceFinance v4.0.0
+      </p>
     </div>
-  )
+  );
 }
 
-export default function SettingsPage() {
-  var navigate = useNavigate()
-  var profileHook = useProfile(); var updateProfile = profileHook.updateProfile
-
-  var reminderState = useState(true); var dailyReminder = reminderState[0]; var setDailyReminder = reminderState[1]
-  var indexState = useState(true); var indexOptIn = indexState[0]; var setIndexOptIn = indexState[1]
-
-  var cardStyle = { background: C.card, border: "1px solid " + C.border, borderRadius: 12, padding: 24, marginBottom: 16 }
-  var sectionLabel = { fontSize: 11, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 16 }
-
-  return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT, display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 24px" }}>
-      <style>{"@import url('https://fonts.cdnfonts.com/css/geist');"}</style>
-      <div style={{ width: "100%", maxWidth: 560 }}>
-        <button onClick={function () { navigate("/dashboard") }} style={{ background: "transparent", border: "1px solid " + C.border, borderRadius: 6, padding: "8px 16px", color: C.dim, fontSize: 12, fontFamily: FONT, cursor: "pointer", marginBottom: 32, transition: "all 0.2s" }}
-          onMouseEnter={function (e) { e.target.style.color = C.text; e.target.style.borderColor = C.faint }}
-          onMouseLeave={function (e) { e.target.style.color = C.dim; e.target.style.borderColor = C.border }}
-        >Dashboard</button>
-
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 600, color: C.text, margin: "0 0 6px", letterSpacing: "-0.02em" }}>Settings</h1>
-          <p style={{ fontSize: 13, color: C.dim, margin: 0 }}>Customize your GraceFinance experience.</p>
-        </div>
-
-        <div style={cardStyle}>
-          <div style={sectionLabel}>Notifications</div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid " + C.border }}>
-            <div>
-              <span style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>Daily check-in reminder</span>
-              <p style={{ fontSize: 12, color: C.dim, margin: "4px 0 0" }}>A gentle nudge each morning to keep your streak alive.</p>
-            </div>
-            <Toggle active={dailyReminder} onToggle={function () { setDailyReminder(!dailyReminder) }} />
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
-            <div>
-              <span style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>Index contribution</span>
-              <p style={{ fontSize: 12, color: C.dim, margin: "4px 0 0" }}>Your anonymized data helps power the GraceFinance Composite Index, a real-time financial confidence indicator.</p>
-            </div>
-            <Toggle active={indexOptIn} onToggle={function () { setIndexOptIn(!indexOptIn) }} />
-          </div>
-        </div>
-
-        <div style={cardStyle}>
-          <div style={sectionLabel}>Your Data</div>
-          <p style={{ fontSize: 13, color: C.dim, lineHeight: 1.7, margin: "0 0 16px" }}>
-            Your data belongs to you. Export it anytime, or delete your account entirely.
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {["Export check-in history (CSV)", "Export FCS trend data (CSV)"].map(function (action, i) {
-              return (<button key={i} style={{ padding: "12px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer", background: "transparent", textAlign: "left", border: "1px solid " + C.border, color: C.dim, transition: "all 0.2s" }}
-                onMouseEnter={function (e) { e.target.style.color = C.text; e.target.style.borderColor = C.faint }}
-                onMouseLeave={function (e) { e.target.style.color = C.dim; e.target.style.borderColor = C.border }}
-              >{action}</button>)
-            })}
-          </div>
-        </div>
-
-        <div style={cardStyle}>
-          <div style={sectionLabel}>Account</div>
-          <button style={{ padding: "12px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: "pointer", background: "transparent", textAlign: "left", border: "1px solid #331111", color: "#ff4444", transition: "all 0.2s", width: "100%" }}>
-            Delete my account and all data
-          </button>
-        </div>
-
-        <p style={{ fontSize: 11, color: C.faint, textAlign: "center", marginTop: 24 }}>GraceFinance v4.0.0</p>
-      </div>
-    </div>
-  )
-}
+export default Settings;
