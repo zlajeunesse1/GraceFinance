@@ -1,11 +1,11 @@
 /**
- * IndexPage — v5.1 (Audit Complete)
- *
- * GraceFinance Composite Index with confidence tier badges.
- * Shows Preview/Beta/Published based on contributor count.
+ * IndexPage — v5.2
+ * ADDED: Live polling every 30 seconds — all users see real-time index updates
+ * ADDED: Live indicator dot + pulse animation on value change
+ * ADDED: "Last updated X seconds ago" live counter
  */
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import {
@@ -16,8 +16,10 @@ import {
 var C = {
   bg: "#000000", card: "#0a0a0a", border: "#1a1a1a",
   text: "#ffffff", muted: "#9ca3af", dim: "#6b7280", faint: "#4b5563",
+  green: "#10b981",
 }
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
+var POLL_INTERVAL = 30000 // 30 seconds
 
 var API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:8000'
@@ -74,6 +76,58 @@ function ConfidenceBadge(props) {
   )
 }
 
+function LiveIndicator(props) {
+  var secondsAgo = props.secondsAgo
+  var label = "Live"
+  if (secondsAgo !== null && secondsAgo > 5) {
+    if (secondsAgo < 60) label = secondsAgo + "s ago"
+    else label = Math.floor(secondsAgo / 60) + "m ago"
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <style>{
+        "@keyframes livePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.3); } }"
+      }</style>
+      <div style={{
+        width: 6, height: 6, borderRadius: "50%", background: C.green,
+        animation: "livePulse 2s ease-in-out infinite",
+      }} />
+      <span style={{ fontSize: 10, color: C.green, fontFamily: FONT, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        {label}
+      </span>
+    </div>
+  )
+}
+
+function ValueFlash(props) {
+  // Briefly flash when value changes
+  var value = props.value
+  var flashState = useState(false); var flash = flashState[0]; var setFlash = flashState[1]
+  var prevRef = useRef(value)
+
+  useEffect(function () {
+    if (prevRef.current !== null && value !== null && prevRef.current !== value) {
+      setFlash(true)
+      var timer = setTimeout(function () { setFlash(false) }, 800)
+      prevRef.current = value
+      return function () { clearTimeout(timer) }
+    }
+    prevRef.current = value
+  }, [value])
+
+  return (
+    <span style={{
+      fontSize: 64, fontWeight: 200, letterSpacing: "-0.04em", color: C.text,
+      fontVariantNumeric: "tabular-nums", lineHeight: 1,
+      transition: "color 0.3s ease",
+      textShadow: flash ? "0 0 20px rgba(16,185,129,0.4)" : "none",
+    }}>
+      {value != null ? value.toFixed(1) : "..."}
+    </span>
+  )
+}
+
 function Nav(props) {
   var items = [
     { id: "dashboard", label: "Dashboard", path: "/dashboard" },
@@ -122,7 +176,33 @@ export default function IndexPage() {
   var methodologyState = useState(null); var methodology = methodologyState[0]; var setMethodology = methodologyState[1]
   var showMethodState = useState(false); var showMethod = showMethodState[0]; var setShowMethod = showMethodState[1]
 
+  // Live polling state
+  var lastFetchState = useState(null); var lastFetch = lastFetchState[0]; var setLastFetch = lastFetchState[1]
+  var secondsAgoState = useState(null); var secondsAgo = secondsAgoState[0]; var setSecondsAgo = secondsAgoState[1]
+
   useEffect(function () { setMounted(true); loadData() }, [])
+
+  // ── Live polling: refresh index every 30 seconds ──
+  useEffect(function () {
+    var pollTimer = setInterval(function () {
+      apiFetch("/index/latest").then(function (data) {
+        if (data) { setLatest(data); setLastFetch(Date.now()) }
+      }).catch(function () {})
+    }, POLL_INTERVAL)
+
+    return function () { clearInterval(pollTimer) }
+  }, [])
+
+  // ── "X seconds ago" counter ──
+  useEffect(function () {
+    var tickTimer = setInterval(function () {
+      if (lastFetch) {
+        setSecondsAgo(Math.floor((Date.now() - lastFetch) / 1000))
+      }
+    }, 1000)
+
+    return function () { clearInterval(tickTimer) }
+  }, [lastFetch])
 
   function loadData() {
     setLoading(true)
@@ -130,7 +210,10 @@ export default function IndexPage() {
       apiFetch("/index/latest").catch(function () { return null }),
       apiFetch("/index/history?days=30").catch(function () { return { data_points: [] } }),
     ]).then(function (results) {
-      setLatest(results[0]); setHistory(results[1] ? results[1].data_points || [] : []); setLoading(false)
+      setLatest(results[0])
+      setHistory(results[1] ? results[1].data_points || [] : [])
+      setLoading(false)
+      setLastFetch(Date.now())
     })
   }
 
@@ -154,6 +237,7 @@ export default function IndexPage() {
   var gfci = hasData ? latest.gfci_composite : null
   var fcsAvg = hasData ? latest.fcs_average : null
   var userCount = hasData ? latest.user_count : 0
+  var contributors = hasData && latest.contributors ? latest.contributors : userCount
   var trend = hasData ? latest.trend_direction || "FLAT" : "FLAT"
   var slope3d = hasData ? latest.gci_slope_3d : null
   var slope7d = hasData ? latest.gci_slope_7d : null
@@ -197,17 +281,18 @@ export default function IndexPage() {
 
         {/* HERO */}
         <Card style={{ marginBottom: 16, padding: "36px 28px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-            <div onClick={handleLabelClick} style={{ cursor: "default" }}>
-              <Label>GraceFinance Composite Index</Label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div onClick={handleLabelClick} style={{ cursor: "default" }}>
+                <Label>GraceFinance Composite Index</Label>
+              </div>
+              <ConfidenceBadge userCount={userCount} />
             </div>
-            <ConfidenceBadge userCount={userCount} />
+            {hasData && <LiveIndicator secondsAgo={secondsAgo} />}
           </div>
 
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginTop: 20, marginBottom: 8 }}>
-            <span style={{ fontSize: 64, fontWeight: 200, letterSpacing: "-0.04em", color: C.text, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
-              {gfci != null ? gfci.toFixed(1) : "..."}
-            </span>
+            <ValueFlash value={gfci} />
             <span style={{ fontSize: 16, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
               {hasData ? getTrendLabel(trend) : ""}
             </span>
@@ -229,7 +314,7 @@ export default function IndexPage() {
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               {[
                 { label: "Avg FCS", value: fcsAvg, decimals: 1 },
-                { label: "Contributors", value: userCount, decimals: 0 },
+                { label: "Contributors", value: contributors, decimals: 0 },
                 { label: "3d Trend", value: slope3d, decimals: 3, showSign: true },
                 { label: "7d Trend", value: slope7d, decimals: 3, showSign: true },
                 { label: "Volatility", value: volatility, decimals: 3 },
@@ -252,7 +337,7 @@ export default function IndexPage() {
 
           <div style={{ fontSize: 11, color: C.faint, display: "flex", justifyContent: "space-between" }}>
             <span>{lastUpdated ? "Published " + lastUpdated : "Waiting for first computation"}</span>
-            <span>{userCount > 0 ? userCount + " active contributor" + (userCount > 1 ? "s" : "") : ""}</span>
+            <span>{contributors > 0 ? contributors + " active contributor" + (contributors > 1 ? "s" : "") : ""}</span>
           </div>
         </Card>
 
@@ -377,4 +462,4 @@ export default function IndexPage() {
       </div>
     </div>
   )
-}                                                                                                                                                                                                                                                                           
+}
