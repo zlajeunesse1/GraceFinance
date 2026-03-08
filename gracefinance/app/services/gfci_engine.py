@@ -1,16 +1,12 @@
 """
 GFCI Engine — GraceFinance Composite Index
 ═══════════════════════════════════════════════
-v2.0 — Raised credibility thresholds
+v2.1 — Fixed orphan snapshot counting
 
-CHANGES FROM v1:
-  - MIN_USERS_FOR_INDEX: 10 → 50
-  - Added MIN_USERS_FOR_PUBLISHED: 200 (new tier)
-  - Index now stores a 'confidence_tier' field conceptually:
-    < 50 users = "preview" (internal only)
-    50-199 users = "beta" (directional indicator)
-    200+ users = "published" (credible signal)
-  - Published flag only set when user_count >= MIN_USERS_FOR_PUBLISHED
+CHANGES FROM v2.0:
+  - Snapshot query now joins against users table to exclude
+    orphaned snapshots from deleted users
+  - user_count reflects only active users
 """
 
 from datetime import datetime, timezone, timedelta
@@ -105,12 +101,13 @@ def compute_daily_gfci(db, segment="national"):
     now = datetime.now(timezone.utc)
     stale_cutoff = now - timedelta(days=STALE_USER_DAYS)
 
-    # Get latest snapshot per user
+    # Get latest snapshot per ACTIVE user (excludes orphaned snapshots)
     latest_sub = (
         db.query(
             UserMetricSnapshot.user_id,
             func.max(UserMetricSnapshot.computed_at).label("max_computed"),
         )
+        .join(User, UserMetricSnapshot.user_id == User.id)
         .filter(
             UserMetricSnapshot.fcs_composite.isnot(None),
             UserMetricSnapshot.computed_at >= stale_cutoff,
@@ -143,6 +140,8 @@ def compute_daily_gfci(db, segment="national"):
         if snap.fcs_composite is None:
             continue
         user = db.query(User).filter(User.id == snap.user_id).first()
+        if not user:
+            continue  # extra safety — skip if user was deleted between queries
         weight = _compute_user_weight(snap, user)
         weighted_scores.append((float(snap.fcs_composite), weight))
         raw_scores.append(float(snap.fcs_composite))
