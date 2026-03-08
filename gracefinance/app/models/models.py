@@ -1,5 +1,10 @@
 """
 GraceFinance Models — Core SQLAlchemy ORM models.
+ADDED:
+  - date_of_birth: Date column for 18+ age verification
+  - verification_token: secure token sent in signup email
+  - verification_token_expires_at: 24hr expiry
+  - ai_messages_used, ai_reset_date: AI usage tracking
 NOTE: CheckInResponse & UserMetricSnapshot live in checkin.py
 NOTE: UserProfile lives in profile.py
 """
@@ -67,60 +72,47 @@ class User(Base):
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), default="")
 
+    # ── Email Verification ──
     email_verified = Column(Boolean, default=False, nullable=False)
+    verification_token = Column(String(128), nullable=True, index=True)
+    verification_token_expires_at = Column(DateTime(timezone=True), nullable=True)
 
+    # ── Age Verification (18+) ──
+    date_of_birth = Column(Date, nullable=True)
+
+    # ── Financial Profile ──
     monthly_income = Column(Numeric(12, 2), default=0)
     monthly_expenses = Column(Numeric(12, 2), default=0)
     financial_goal = Column(Text, default="")
 
+    # ── Onboarding ──
     onboarding_completed = Column(Boolean, default=False, nullable=False)
     onboarding_goals = Column(JSON, nullable=True)
 
+    # ── Subscription ──
     subscription_tier = Column(SQLEnum(SubscriptionTier), default=SubscriptionTier.FREE)
     stripe_customer_id = Column(String(255), nullable=True)
     stripe_subscription_id = Column(String(255), nullable=True)
 
+    # ── AI Usage Tracking ──
+    ai_messages_used = Column(Integer, default=0, nullable=False, server_default="0")
+    ai_reset_date = Column(Date, nullable=True)
+
     # ── Streak & Check-in Tracking ──
     current_streak = Column(Integer, default=0, nullable=False, server_default="0")
     last_checkin_date = Column(DateTime(timezone=True), nullable=True)
+    last_checkin_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    last_checkin_at = Column(DateTime(timezone=True), nullable=True)
 
-    # ── Relationships (each defined ONCE) ──
-    profile = relationship(
-        "UserProfile",
-        back_populates="user",
-        uselist=False,
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-    checkin_responses = relationship(
-        "CheckInResponse",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    metric_snapshots = relationship(
-        "UserMetricSnapshot",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    debts = relationship(
-        "Debt",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    transactions = relationship(
-        "Transaction",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    bills = relationship(
-        "Bill",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
+    # ── Relationships ──
+    profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan", passive_deletes=True)
+    checkin_responses = relationship("CheckInResponse", back_populates="user", cascade="all, delete-orphan")
+    metric_snapshots = relationship("UserMetricSnapshot", back_populates="user", cascade="all, delete-orphan")
+    debts = relationship("Debt", back_populates="user", cascade="all, delete-orphan")
+    transactions = relationship("Transaction", back_populates="user", cascade="all, delete-orphan")
+    bills = relationship("Bill", back_populates="user", cascade="all, delete-orphan")
 
 
 # ═══════════════════ DEBT ═══════════════════
@@ -130,7 +122,6 @@ class Debt(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-
     name = Column(String(200), nullable=False)
     debt_type = Column(SQLEnum(DebtType), default=DebtType.OTHER)
     balance = Column(Numeric(12, 2), default=0)
@@ -138,10 +129,8 @@ class Debt(Base):
     min_payment = Column(Numeric(12, 2), default=0)
     credit_limit = Column(Numeric(12, 2), nullable=True)
     is_active = Column(Boolean, default=True)
-
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
     user = relationship("User", back_populates="debts")
 
 
@@ -152,15 +141,12 @@ class Transaction(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-
     date = Column(DateTime(timezone=True), nullable=False)
     description = Column(String(500), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     category = Column(SQLEnum(TransactionCategory), default=TransactionCategory.OTHER)
     is_need = Column(Boolean, default=False)
-
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
     user = relationship("User", back_populates="transactions")
 
 
@@ -171,14 +157,11 @@ class Bill(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-
     name = Column(String(200), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     due_day = Column(Integer, nullable=False)
     status = Column(SQLEnum(BillStatus), default=BillStatus.UPCOMING)
     is_recurring = Column(Boolean, default=True)
-
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
     user = relationship("User", back_populates="bills")

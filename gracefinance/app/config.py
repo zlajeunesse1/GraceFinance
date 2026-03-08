@@ -27,9 +27,15 @@ class Settings(BaseSettings):
     # Claude AI
     anthropic_api_key: str = ""
 
+    # Email (Google SMTP via support@gracefinance.co)
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+
     # App
     app_env: str = "development"
-    frontend_url: str = "http://localhost:3000"
+    frontend_url: str = "https://gracefinance.co"
     app_domain: str = ""
 
     class Config:
