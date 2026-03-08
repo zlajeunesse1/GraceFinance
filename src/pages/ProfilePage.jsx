@@ -17,6 +17,13 @@ var RISK_OPTIONS = [
   { value: "aggressive", label: "Growth", desc: "Maximize long-term upside" },
 ]
 
+function getTierDisplay(tier) {
+  var t = (tier || "free").toLowerCase()
+  if (t === "premium") return "GracePremium"
+  if (t === "pro") return "GracePro"
+  return "Free"
+}
+
 export default function ProfilePage() {
   var navigate = useNavigate(); var auth = useAuth(); var user = auth.user
   var profileHook = useProfile(); var profile = profileHook.profile; var isLoading = profileHook.isLoading
@@ -28,6 +35,9 @@ export default function ProfilePage() {
   var riskState = useState("balanced"); var riskStyle = riskState[0]; var setRiskStyle = riskState[1]
   var savedState = useState(false); var saved = savedState[0]; var setSaved = savedState[1]
   var focusedState = useState(null); var focused = focusedState[0]; var setFocused = focusedState[1]
+
+  var currentTier = (user && user.subscription_tier ? user.subscription_tier : "free").toLowerCase()
+  var isPremium = currentTier === "premium"
 
   useEffect(function () {
     if (profile) { setDisplayName(profile.display_name || ""); setTimezone(profile.timezone || "America/New_York"); setCurrency(profile.currency || "USD"); setRiskStyle(profile.risk_style || "balanced") }
@@ -69,13 +79,31 @@ export default function ProfilePage() {
             { label: "Name", value: user ? ((user.first_name || "") + " " + (user.last_name || "")).trim() || "..." : "..." },
             { label: "Email", value: user ? user.email : "..." },
             { label: "Member since", value: user && user.created_at ? new Date(user.created_at).toLocaleDateString() : "..." },
-            { label: "Plan", value: "Free" },
-          ].map(function (item, i, arr) {
-            return (<div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: i < arr.length - 1 ? "1px solid " + C.border : "none" }}>
+          ].map(function (item, i) {
+            return (<div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: "1px solid " + C.border }}>
               <span style={{ fontSize: 13, color: C.dim }}>{item.label}</span>
               <span style={{ fontSize: 13, color: C.text, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{item.value}</span>
             </div>)
           })}
+          {/* Plan row with upgrade button */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0" }}>
+            <span style={{ fontSize: 13, color: C.dim }}>Plan</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{getTierDisplay(currentTier)}</span>
+              {!isPremium && (
+                <button
+                  onClick={function () { navigate("/upgrade") }}
+                  style={{
+                    background: "transparent", border: "1px solid " + C.border, borderRadius: 6,
+                    padding: "4px 10px", color: C.muted, fontSize: 11, fontWeight: 600,
+                    fontFamily: FONT, cursor: "pointer", transition: "all 0.2s",
+                  }}
+                  onMouseEnter={function (e) { e.target.style.borderColor = C.faint; e.target.style.color = C.text }}
+                  onMouseLeave={function (e) { e.target.style.borderColor = C.border; e.target.style.color = C.muted }}
+                >{currentTier === "pro" ? "Go Premium" : "Upgrade"}</button>
+              )}
+            </div>
+          </div>
         </div>
 
         <div style={cardStyle}>
