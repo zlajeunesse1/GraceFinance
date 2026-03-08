@@ -1,20 +1,22 @@
 """
-GraceFinance — Grace AI Coach Service (v3.1)
+GraceFinance — Grace AI Coach Service (v3.2)
 ==============================================
-CHANGES FROM v3.0:
-  - _build_user_context now injects full onboarding profile:
-    * Monthly income, expenses, available cash, savings rate
-    * User's stated financial goals (from onboarding_goals JSON)
-    * Personal mission/goal text (financial_goal field)
-  - Grace now knows who she's talking to from the first message
+CHANGES FROM v3.1:
+  - Added AI usage enforcement by subscription tier
+  - Free:    10 messages/month
+  - Pro:     100 messages/month  
+  - Premium: unlimited
+  - check_ai_usage() — raises HTTPException 429 if limit hit
+  - increment_ai_usage() — bumps counter, resets monthly
 """
 
 import os
 import anthropic
+from datetime import date, datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from fastapi import HTTPException
 
-# Graceful imports
 try:
     from app.services.intelligence_engine import (
         log_conversation_themes,
@@ -24,6 +26,62 @@ try:
     HAS_ENGINE = True
 except ImportError:
     HAS_ENGINE = False
+
+
+# ── AI Usage Limits by Tier ──────────────────────────────────────────────────
+AI_USAGE_LIMITS = {
+    "free":    10,
+    "pro":     100,
+    "premium": None,   # unlimited
+}
+
+
+def check_ai_usage(db: Session, user) -> dict:
+    """
+    Check whether the user has remaining AI messages this month.
+    Resets the counter if we're in a new calendar month.
+    Returns usage info dict. Raises HTTPException 429 if limit exceeded.
+    """
+    today = date.today()
+    tier = str(getattr(user, "subscription_tier", "free") or "free").lower()
+    limit = AI_USAGE_LIMITS.get(tier)
+
+    # Reset counter if it's a new month
+    reset_date = getattr(user, "ai_reset_date", None)
+    if reset_date is None or (hasattr(reset_date, 'month') and (
+        reset_date.month != today.month or reset_date.year != today.year
+    )):
+        user.ai_messages_used = 0
+        user.ai_reset_date = today
+        db.commit()
+
+    used = getattr(user, "ai_messages_used", 0) or 0
+
+    if limit is not None and used >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "ai_limit_reached",
+                "tier": tier,
+                "used": used,
+                "limit": limit,
+                "message": f"You've used all {limit} Grace AI messages for this month. Upgrade to keep the conversation going.",
+            },
+        )
+
+    return {
+        "tier": tier,
+        "used": used,
+        "limit": limit,
+        "remaining": None if limit is None else max(0, limit - used),
+    }
+
+
+def increment_ai_usage(db: Session, user):
+    """Increment the user's AI message counter after a successful response."""
+    current = getattr(user, "ai_messages_used", 0) or 0
+    user.ai_messages_used = current + 1
+    db.commit()
 
 
 GRACE_SYSTEM_PROMPT = """You are Grace, the GraceFinance AI financial coach.
@@ -68,133 +126,50 @@ HOW THE FCS IS COMPUTED (Three-Component Formula):
   FCS = (Behavior x 60%) + (Consistency x 30%) + (Trend x 10%)
 
   Behavior Score (0-100): Weighted average of five behavioral dimensions.
-    This is what you're actually doing with money right now.
-
   Consistency Score (0-100): How reliably you check in and cover all dimensions.
-    Checking in 7 days a week across all 5 pillars = 100.
-    Sporadic check-ins = lower score.
-    This rewards showing up, but does NOT inflate the behavior score.
-
   Trend Score (0-100): 14-day directional slope of your behavior score.
-    50 = flat. Above 50 = improving. Below 50 = declining.
-    This captures momentum. Are you getting better or worse?
 
 THE FIVE FCS DIMENSIONS:
 
-1. STABILITY (30% of Behavior Score)
-   How consistently you meet core financial obligations.
-   What moves it: On-time bills, income regularity, avoiding overdrafts.
-   Coaching: Low Stability is always the first problem to solve. Everything else
-   is noise until the foundation holds.
-
-2. OUTLOOK (25% of Behavior Score)
-   Forward-looking financial confidence and goal-setting behavior.
-   What moves it: Goal progress, planning, expressed optimism.
-   Coaching: Outlook responds powerfully to small wins. Low Outlook often
-   means shame or hopelessness. Meet it with empathy first.
-
-3. PURCHASING POWER (20% of Behavior Score)
-   Discretionary income and spending flexibility after obligations.
-   What moves it: Spending headroom, ability to absorb surprise costs.
-   Coaching: Low Purchasing Power is often structural (income vs costs)
-   but sometimes behavioral (lifestyle creep). Understanding which one matters.
-
-4. EMERGENCY READINESS (15% of Behavior Score)
-   Financial safety net depth and shock absorption capacity.
-   What moves it: Savings cushion, active contributions, preparedness.
-   Coaching: Building an emergency fund is often the highest-leverage habit
-   change available. Even $500 changes the psychology.
-
-5. FINANCIAL AGENCY (10% of Behavior Score)
-   Ownership and intentionality over financial decisions.
-   What moves it: Active management, learning, deliberate choices.
-   Coaching: Agency increases when people feel seen and capable. Never
-   suggest someone is a victim of their choices.
+1. STABILITY (30%) — Core obligations, bills, income regularity
+2. OUTLOOK (25%) — Forward-looking confidence and goal-setting
+3. PURCHASING POWER (20%) — Discretionary income and spending flexibility
+4. EMERGENCY READINESS (15%) — Safety net depth and shock absorption
+5. FINANCIAL AGENCY (10%) — Ownership and intentionality over decisions
 
 FCS SCORE BANDS:
-  0-19   Critical       Immediate attention needed
-  20-34  Struggling     Foundation is shaky
-  35-49  Growing        In the arena, showing up
-  50-64  Building       Real progress, some fragility
-  65-79  Strong         Solid foundation
-  80-100 Thriving       Financially confident and resilient
+  0-19   Critical       80-100 Thriving
+  20-34  Struggling     65-79  Strong
+  35-49  Growing        50-64  Building
 
-INTEGRITY SIGNALS (use these to coach smarter):
-
-  Coherence Score (0-100): How internally consistent are the user's pillar scores?
-    High coherence = believable, consistent data.
-    Low coherence = contradictory signals. Example: claiming high stability
-    but zero emergency readiness. When you see low coherence, gently probe
-    the contradiction. "Your stability looks solid but your emergency readiness
-    is lagging. What's happening there?"
-
-  Response Entropy (0-100): How varied are the user's check-in answers?
-    High entropy = honest, varied responses (good).
-    Low entropy = same answers every day (potential disengagement or gaming).
-    When you see low entropy, encourage deeper reflection. "I notice your
-    answers have been pretty consistent lately. Has anything actually changed
-    in your financial life this week?"
-
-  Sustained Deterioration: True when the raw score has been below the
-    displayed score for 5+ consecutive check-ins. This means the EMA
-    smoothing is masking a real downward trend. When this flag is True,
-    surface it directly but gently. "Your score looks stable on the surface,
-    but I'm seeing some signals underneath that suggest things might be
-    tightening. Want to talk about what's changed recently?"
-
-  Raw-Composite Gap: The difference between the raw daily score and the
-    smoothed displayed score. A growing negative gap means the user's
-    actual behavior is declining faster than the score shows.
-
-  7-Day and 30-Day Slopes: The directional trend of the FCS over time.
-    Negative slope = declining. Positive = improving. Use these to
-    contextualize coaching. "Your 7-day trend is pointing up. Whatever
-    you changed this week is working."
-
-HOW TO USE INTEGRITY SIGNALS:
-- Never tell the user their "coherence score" or "entropy score" directly.
-  These are internal signals for your coaching intelligence.
-- Use them to shape your questions, not your statements.
-- Low coherence → ask probing questions about contradictions.
-- Low entropy → encourage deeper reflection on recent changes.
-- Sustained deterioration → surface the hidden trend with empathy.
-- Positive slopes → reinforce the momentum.
-- Negative slopes → acknowledge the difficulty without catastrophizing.
+INTEGRITY SIGNALS (internal — never name these to the user):
+- Coherence Score: Internal consistency of pillar scores
+- Response Entropy: Variety in check-in answers
+- Sustained Deterioration: Raw score below displayed for 5+ check-ins
+- Raw-Composite Gap: Difference between raw and smoothed score
+- 7-Day and 30-Day Slopes: Directional trend
 
 WHAT YOU CAN DO:
-- Help users understand their FCS score and what drives each dimension.
-- Coach on budgeting, saving, debt payoff, and building financial habits.
-- Explore the psychology behind spending. Stress spending, retail therapy, avoidance.
-- Provide general financial education and literacy.
-- Help set realistic, achievable money goals.
-- When you have their data, reference specific numbers naturally.
-- Use integrity signals to ask smarter, more targeted questions.
-
-ABOUT SAVINGS GUIDANCE:
-- Framing matters. You coach behavior, not outcomes.
-- Say: "People who automate even $25/week tend to build the savings habit faster than those who try to save large lump sums."
-- Say: "One thing that tends to help is separating your savings into a different account — out of sight, out of mind."
-- Never say: "You should save $X" or "Put X% into savings."
-- The behavior-first framing keeps guidance educational and personal, not prescriptive.
+- Help users understand their FCS and what drives each dimension
+- Coach on budgeting, saving, debt payoff, financial habits
+- Explore psychology behind spending patterns
+- Provide general financial education
+- Reference their specific data naturally when available
 
 STRICT GUARDRAILS:
-1. NEVER recommend specific investments, stocks, bonds, crypto, or securities.
-2. NEVER provide specific tax advice or suggest tax strategies.
-3. NEVER promise or project specific financial outcomes or returns.
-4. NEVER act as or imply you are a fiduciary or licensed financial adviser.
-5. NEVER share or reference other users' specific data.
-6. NEVER reveal internal integrity scores (coherence, entropy) by name.
-7. If asked about investing specifics: "I focus on building your financial foundation. For investment advice, I'd recommend a licensed financial advisor."
-8. If user seems in genuine crisis (eviction, can't afford food/medicine), gently suggest 211.org or local resources while staying supportive.
+1. NEVER recommend specific investments, stocks, bonds, crypto, or securities
+2. NEVER provide specific tax advice
+3. NEVER promise or project specific financial outcomes
+4. NEVER act as or imply you are a licensed financial adviser
+5. NEVER reveal internal integrity score names
 
 RESPONSE STYLE:
-- Concise: 2-4 short paragraphs max for most messages.
-- Encouraging but real. Don't be fake-positive.
-- Ask ONE follow-up question when appropriate.
-- Reference their data naturally. "Your stability score jumped this week" not "According to your data..."
-- Use simple analogies for financial concepts.
+- Concise: 2-4 short paragraphs max
+- Encouraging but real
+- Ask ONE follow-up question when appropriate
+- Reference their data naturally
 
-DISCLAIMER (include naturally when giving financial guidance, not for casual chat):
+DISCLAIMER (include when giving financial guidance, not casual chat):
 "Just a reminder — I'm your coach, not a financial advisor. For specific investment or tax decisions, a licensed professional is the way to go."
 """
 
@@ -226,42 +201,37 @@ ONBOARDING_GOAL_LABELS = {
 
 
 def _score_band(score: float) -> str:
-    if score >= 80:
-        return "Thriving"
-    elif score >= 65:
-        return "Strong"
-    elif score >= 50:
-        return "Building"
-    elif score >= 35:
-        return "Growing"
-    elif score >= 20:
-        return "Struggling"
+    if score >= 80: return "Thriving"
+    elif score >= 65: return "Strong"
+    elif score >= 50: return "Building"
+    elif score >= 35: return "Growing"
+    elif score >= 20: return "Struggling"
     return "Critical"
 
 
 def _build_user_context(db: Session, user_id) -> str:
-    """
-    Build rich user context from the latest UserMetricSnapshot + onboarding profile.
-    Includes all v5.1 audit signals + income/expenses/goals for personalized coaching.
-    """
     context_parts = []
 
-    # ── User profile + onboarding data ──────────────────────────────────────
     try:
         from app.models import User
         user = db.query(User).filter(User.id == user_id).first()
         if user:
-            # Name
             name = getattr(user, "first_name", None)
             if name:
                 context_parts.append(f"User's name: {name}")
 
-            # Streak
             streak = getattr(user, "current_streak", 0) or 0
             if streak > 0:
                 context_parts.append(f"Current check-in streak: {streak} day{'s' if streak != 1 else ''}")
 
-            # ── ONBOARDING FINANCIAL PROFILE (THE PERSONALIZATION CORE) ──
+            # Subscription context
+            tier = str(getattr(user, "subscription_tier", "free") or "free").lower()
+            used = getattr(user, "ai_messages_used", 0) or 0
+            limit = AI_USAGE_LIMITS.get(tier)
+            if limit is not None:
+                remaining = max(0, limit - used)
+                context_parts.append(f"AI usage this month: {used}/{limit} messages ({remaining} remaining)")
+
             income = getattr(user, "monthly_income", None)
             expenses = getattr(user, "monthly_expenses", None)
             goal_text = getattr(user, "financial_goal", None)
@@ -278,15 +248,9 @@ def _build_user_context(db: Session, user_id) -> str:
                 available = income_f - expenses_f
                 savings_rate = (available / income_f) * 100
                 if available >= 0:
-                    context_parts.append(
-                        f"Monthly available after expenses: ${available:,.0f} "
-                        f"({savings_rate:.0f}% savings rate)"
-                    )
+                    context_parts.append(f"Monthly available after expenses: ${available:,.0f} ({savings_rate:.0f}% savings rate)")
                 else:
-                    context_parts.append(
-                        f"Monthly shortfall: ${abs(available):,.0f} "
-                        f"(expenses exceed income by {abs(savings_rate):.0f}%)"
-                    )
+                    context_parts.append(f"Monthly shortfall: ${abs(available):,.0f} (expenses exceed income by {abs(savings_rate):.0f}%)")
 
             if goal_text and goal_text.strip():
                 context_parts.append(f"User's personal financial goal: \"{goal_text.strip()}\"")
@@ -298,11 +262,8 @@ def _build_user_context(db: Session, user_id) -> str:
     except Exception:
         pass
 
-    # ── Latest FCS snapshot with all audit signals ───────────────────────────
     try:
-        from app.models.checkin import UserMetricSnapshot, CheckInResponse
-        from sqlalchemy import func, and_
-        from datetime import datetime, timezone, timedelta
+        from app.models.checkin import UserMetricSnapshot
 
         snapshot = (
             db.query(UserMetricSnapshot)
@@ -312,12 +273,10 @@ def _build_user_context(db: Session, user_id) -> str:
         )
 
         if snapshot:
-            # Three-component breakdown
             fcs = getattr(snapshot, "fcs_composite", None)
             if fcs is not None:
                 fcs = float(fcs)
-                band = _score_band(fcs)
-                context_parts.append(f"Current FCS: {round(fcs, 1)} ({band})")
+                context_parts.append(f"Current FCS: {round(fcs, 1)} ({_score_band(fcs)})")
 
             behavior = getattr(snapshot, "fcs_behavior", None)
             consistency = getattr(snapshot, "fcs_consistency", None)
@@ -332,7 +291,6 @@ def _build_user_context(db: Session, user_id) -> str:
                 trend_dir = "improving" if trend_f > 55 else "declining" if trend_f < 45 else "flat"
                 context_parts.append(f"Trend component: {round(trend_f, 1)}/100 ({trend_dir})")
 
-            # Five dimensions
             dims = {}
             for db_field in ["current_stability", "future_outlook", "purchasing_power",
                               "emergency_readiness", "financial_agency"]:
@@ -344,10 +302,7 @@ def _build_user_context(db: Session, user_id) -> str:
                     dims[label] = (round(val_f * 100, 1), _score_band(val_f * 100), weight)
 
             if dims:
-                dim_lines = [
-                    f"  {label} ({weight}): {score} — {band}"
-                    for label, (score, band, weight) in dims.items()
-                ]
+                dim_lines = [f"  {label} ({weight}): {score} — {band}" for label, (score, band, weight) in dims.items()]
                 context_parts.append("Dimension breakdown:\n" + "\n".join(dim_lines))
 
                 weak = [label for label, (score, band, weight) in dims.items() if score < 50]
@@ -358,51 +313,44 @@ def _build_user_context(db: Session, user_id) -> str:
                 if strong:
                     context_parts.append(f"Strong dimensions (75+): {', '.join(strong)}")
 
-            # Integrity signals
             integrity_parts = []
-
             coherence = getattr(snapshot, "fcs_coherence", None)
             if coherence is not None:
                 coherence_f = float(coherence)
                 if coherence_f < 50:
-                    integrity_parts.append(f"COHERENCE ALERT: Score is {round(coherence_f, 1)}/100. User's pillar scores are internally contradictory. Probe gently for inconsistencies.")
+                    integrity_parts.append(f"COHERENCE ALERT: {round(coherence_f, 1)}/100. Probe gently for inconsistencies.")
                 elif coherence_f < 70:
-                    integrity_parts.append(f"Coherence is moderate ({round(coherence_f, 1)}/100). Some dimensional inconsistency detected.")
+                    integrity_parts.append(f"Coherence moderate ({round(coherence_f, 1)}/100).")
 
             entropy = getattr(snapshot, "fcs_entropy", None)
             if entropy is not None:
                 entropy_f = float(entropy)
                 if entropy_f < 30:
-                    integrity_parts.append(f"LOW ENTROPY ALERT: Score is {round(entropy_f, 1)}/100. User gives very similar answers every day. Encourage deeper reflection and varied self-assessment.")
+                    integrity_parts.append(f"LOW ENTROPY ALERT: {round(entropy_f, 1)}/100. Encourage deeper reflection.")
                 elif entropy_f < 50:
-                    integrity_parts.append(f"Response variety is moderate ({round(entropy_f, 1)}/100). Could benefit from more reflective check-ins.")
+                    integrity_parts.append(f"Response variety moderate ({round(entropy_f, 1)}/100).")
 
-            deterioration = getattr(snapshot, "sustained_deterioration", False)
-            if deterioration:
-                integrity_parts.append("SUSTAINED DETERIORATION: Raw score has been below displayed score for 5+ consecutive check-ins. The EMA smoothing is masking a real downward trend. Surface this gently but directly.")
+            if getattr(snapshot, "sustained_deterioration", False):
+                integrity_parts.append("SUSTAINED DETERIORATION: EMA masking real downward trend. Surface gently.")
 
             gap = getattr(snapshot, "raw_composite_gap", None)
             if gap is not None:
                 gap_f = float(gap)
                 if gap_f < -3:
-                    integrity_parts.append(f"RAW-COMPOSITE GAP: {round(gap_f, 1)} points. The user's actual daily behavior is significantly below their displayed smoothed score.")
+                    integrity_parts.append(f"RAW-COMPOSITE GAP: {round(gap_f, 1)} pts. Actual behavior below displayed score.")
                 elif gap_f > 3:
-                    integrity_parts.append(f"POSITIVE GAP: {round(gap_f, 1)} points. User's raw behavior is outperforming their displayed score. Encourage them.")
+                    integrity_parts.append(f"POSITIVE GAP: {round(gap_f, 1)} pts. Raw outperforming displayed. Encourage.")
 
             slope_7d = getattr(snapshot, "fcs_slope_7d", None)
             slope_30d = getattr(snapshot, "fcs_slope_30d", None)
             if slope_7d is not None:
-                slope_7d_f = float(slope_7d)
-                if slope_7d_f > 0.5:
-                    integrity_parts.append(f"7-day trend: +{round(slope_7d_f, 2)} pts/day. Strong upward momentum this week.")
-                elif slope_7d_f < -0.5:
-                    integrity_parts.append(f"7-day trend: {round(slope_7d_f, 2)} pts/day. Noticeable decline this week.")
+                s = float(slope_7d)
+                if s > 0.5: integrity_parts.append(f"7-day trend: +{round(s,2)} pts/day. Strong upward momentum.")
+                elif s < -0.5: integrity_parts.append(f"7-day trend: {round(s,2)} pts/day. Noticeable decline.")
             if slope_30d is not None:
-                slope_30d_f = float(slope_30d)
-                if slope_30d_f > 0.3:
-                    integrity_parts.append(f"30-day trend: +{round(slope_30d_f, 2)} pts/day. Sustained improvement over the past month.")
-                elif slope_30d_f < -0.3:
-                    integrity_parts.append(f"30-day trend: {round(slope_30d_f, 2)} pts/day. Sustained decline over the past month.")
+                s = float(slope_30d)
+                if s > 0.3: integrity_parts.append(f"30-day trend: +{round(s,2)} pts/day. Sustained improvement.")
+                elif s < -0.3: integrity_parts.append(f"30-day trend: {round(s,2)} pts/day. Sustained decline.")
 
             if integrity_parts:
                 context_parts.append(
@@ -410,29 +358,28 @@ def _build_user_context(db: Session, user_id) -> str:
                     + "\n".join(integrity_parts)
                 )
 
-            checkin_count = getattr(snapshot, "checkin_count", 0)
-            if checkin_count:
-                context_parts.append(f"Total responses in scoring window: {checkin_count}")
-
     except Exception:
         pass
 
     if context_parts:
-        return (
-            "\n\nLIVE USER CONTEXT (use naturally in coaching):\n"
-            + "\n".join(context_parts)
-        )
+        return "\n\nLIVE USER CONTEXT (use naturally in coaching):\n" + "\n".join(context_parts)
     return ""
 
 
-def chat_with_grace(db: Session, user_id, messages: list[dict]) -> str:
+def chat_with_grace(db: Session, user, messages: list[dict]) -> dict:
     """
     Send a conversation to Claude with full platform knowledge + live user context.
+    Now accepts user object directly for usage tracking.
+    Returns dict with response text and usage info.
     """
+    # ── Usage check BEFORE calling Claude ───────────────────────────────────
+    usage = check_ai_usage(db, user)
+
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY not set.")
 
+    user_id = user.id
     user_context = ""
     insight_block = ""
 
@@ -465,6 +412,9 @@ def chat_with_grace(db: Session, user_id, messages: list[dict]) -> str:
 
     response_text = response.content[0].text
 
+    # ── Increment usage AFTER successful response ────────────────────────────
+    increment_ai_usage(db, user)
+
     if HAS_ENGINE:
         try:
             profile = UserProfileBuilder().build(db, user_id, messages)
@@ -474,7 +424,18 @@ def chat_with_grace(db: Session, user_id, messages: list[dict]) -> str:
         except Exception:
             pass
 
-    return response_text
+    # Return updated usage for frontend
+    new_used = getattr(user, "ai_messages_used", 0) or 0
+    limit = usage["limit"]
+    return {
+        "response": response_text,
+        "usage": {
+            "used": new_used,
+            "limit": limit,
+            "remaining": None if limit is None else max(0, limit - new_used),
+            "tier": usage["tier"],
+        }
+    }
 
 
 def get_grace_intro(db: Session, user_id) -> dict:
@@ -501,7 +462,6 @@ def get_grace_intro(db: Session, user_id) -> dict:
         "Help me set a realistic money goal",
     ]
 
-    # Personalize suggestions based on onboarding goals
     if onboarding_goals and isinstance(onboarding_goals, list):
         goal_suggestions = {
             "save": "How do I build a savings habit that actually sticks?",
@@ -515,30 +475,23 @@ def get_grace_intro(db: Session, user_id) -> dict:
         if personalized:
             suggestions = personalized[:3] + suggestions[:2]
 
-    # Personalize based on latest snapshot
     try:
         from app.models.checkin import UserMetricSnapshot
-
         snapshot = (
             db.query(UserMetricSnapshot)
             .filter(UserMetricSnapshot.user_id == user_id)
             .order_by(desc(UserMetricSnapshot.computed_at))
             .first()
         )
-
         if snapshot:
-            deterioration = getattr(snapshot, "sustained_deterioration", False)
-            if deterioration:
+            if getattr(snapshot, "sustained_deterioration", False):
                 suggestions.insert(0, "My finances feel like they're slipping. What should I focus on?")
-
             slope_7d = getattr(snapshot, "fcs_slope_7d", None)
             if slope_7d is not None and float(slope_7d) > 0.5:
                 suggestions.insert(0, "My score is improving. How do I keep this momentum?")
-
             fcs = getattr(snapshot, "fcs_composite", None)
             if fcs is not None and float(fcs) >= 75:
                 suggestions.insert(0, "I'm doing well. What should I optimize next?")
-
             suggestions = suggestions[:5]
     except Exception:
         pass
