@@ -11,6 +11,7 @@ API docs available at:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.config import get_settings
 from app.database import engine, Base
@@ -25,8 +26,9 @@ from app.routers import (
 from app.routers.grace import router as grace_router
 from app.routers.profile import router as profile_router
 from app.routers.legal_routes import router as legal_router
-from app.routers.export import router as export_router       # ← NEW
+from app.routers.export import router as export_router
 from app.routers import me_router
+from app.services.daily_emails import send_daily_engagement_emails
 
 settings = get_settings()
 
@@ -43,6 +45,18 @@ app = FastAPI(
     docs_url=None if is_prod else "/docs",
     redoc_url=None if is_prod else "/redoc",
 )
+
+# ── Daily Engagement Emails — 8:00 AM EST (13:00 UTC) ──
+scheduler = BackgroundScheduler()
+scheduler.add_job(
+    send_daily_engagement_emails,
+    "cron",
+    hour=13,
+    minute=0,
+    id="daily_engagement_email",
+    replace_existing=True,
+)
+scheduler.start()
 
 # ── CORS — explicit origins only, no wildcards ──
 allowed_origins = [settings.frontend_url]
@@ -101,7 +115,7 @@ app.include_router(me_router)
 app.include_router(feed_router)
 
 # ── Data Export ──
-app.include_router(export_router)                             # ← NEW
+app.include_router(export_router)
 
 # ── Legal Pages ──
 app.include_router(legal_router)
