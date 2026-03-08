@@ -1,7 +1,6 @@
 /**
- * LoginPage — v6.1
- * FIX: Removed FormFields/UnverifiedBanner inner components — caused input focus loss on every keystroke.
- *      Form JSX is now inlined directly in the render.
+ * LoginPage — v6.2
+ * ADDED: "See our plans" link to pricing page
  */
 
 import { useState } from 'react'
@@ -105,6 +104,9 @@ export default function LoginPage() {
       </form>
       <p style={{ textAlign: 'center', marginTop: 32, fontSize: 13, color: '#6b7280' }}>
         New here?{' '}<Link to="/signup" style={{ color: '#ffffff', fontWeight: 500, textDecoration: 'none' }}>Create your account</Link>
+      </p>
+      <p style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: '#4b5563' }}>
+        <Link to="/pricing" style={{ color: '#6b7280', textDecoration: 'none' }}>See our plans →</Link>
       </p>
     </>
   )

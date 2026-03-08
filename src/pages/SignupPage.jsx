@@ -1,7 +1,6 @@
 /**
- * SignupPage — v6.1
- * FIX: Removed FormFields/TermsCheckbox inner components — caused input focus loss on every keystroke.
- *      Form JSX is now inlined directly in the render.
+ * SignupPage — v6.2
+ * ADDED: "See our plans" link to pricing page
  */
 
 import { useState } from 'react'
@@ -152,6 +151,9 @@ export default function SignupPage() {
       </form>
       <p style={{ textAlign: 'center', marginTop: 28, fontSize: 13, color: '#6b7280' }}>
         Already tracking?{' '}<Link to="/login" style={{ color: '#ffffff', fontWeight: 500, textDecoration: 'none' }}>Sign in</Link>
+      </p>
+      <p style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: '#4b5563' }}>
+        <Link to="/pricing" style={{ color: '#6b7280', textDecoration: 'none' }}>See our plans →</Link>
       </p>
     </>
   )
