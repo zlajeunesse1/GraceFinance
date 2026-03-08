@@ -5,12 +5,15 @@ Endpoints:
   GET /me/today    → Current day check-in status
   GET /me/metrics  → UserMetricsSnapshot (canonical source of truth for all UI)
 
+FIX: checkins_this_week now counts distinct check-in DAYS, not individual
+     question responses. 1 session × 5 questions was showing "5 check-ins".
+
 Auth: JWT-scoped identity only. No user_id in request body or path.
 """
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, desc
+from sqlalchemy import func, and_, desc, cast, Date
 from datetime import date, datetime, timezone, timedelta
 
 from app.database import get_db
@@ -98,9 +101,12 @@ def get_metrics(
         .first()
     )
 
+    # ── FIX: count distinct calendar days, not individual response rows ──────
+    # Old: counted CheckInResponse rows → 5 questions = "5 check-ins"
+    # New: counts distinct dates → 1 session = "1 check-in"
     week_start = datetime.now(timezone.utc) - timedelta(days=7)
     checkins_this_week = (
-        db.query(func.count(CheckInResponse.id))
+        db.query(func.count(func.distinct(cast(CheckInResponse.checkin_date, Date))))
         .filter(
             and_(
                 CheckInResponse.user_id == user.id,
@@ -110,7 +116,6 @@ def get_metrics(
         .scalar() or 0
     )
 
-    # getattr guards against current_streak column not yet on older User rows
     streak = getattr(user, 'current_streak', 0) or 0
 
     return _build_snapshot(latest, previous, streak, checkins_this_week)
@@ -146,7 +151,6 @@ def get_today_status(
 
     return {
         "has_checked_in_today": today_count > 0,
-        # getattr guards against current_streak column not yet on older User rows
         "streak": getattr(user, 'current_streak', 0) or 0,
         "last_checkin_at": last_checkin,
     }
