@@ -1,6 +1,6 @@
-import { useState, useContext } from "react"
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { AuthContext } from "../context/AuthContext"
+import { useAuth } from "../context/AuthContext"
 
 const TIERS = [
   {
@@ -58,7 +58,7 @@ export default function UpgradePage() {
   const [interval, setInterval] = useState("monthly")
   const [loading, setLoading] = useState(null)
   const [error, setError] = useState(null)
-  const { user } = useContext(AuthContext)
+  const { user } = useAuth()
   const navigate = useNavigate()
 
   const currentTier = (user?.subscription_tier || "free").toLowerCase()
