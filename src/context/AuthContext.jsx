@@ -1,109 +1,110 @@
-// ─── Auth API ─────────────────────────────────────────────────────
-// All auth-related API calls to the FastAPI backend.
-// ──────────────────────────────────────────────────────────────────
+import { createContext, useContext, useState, useEffect } from 'react'
+import { authApi } from '../api/auth'
 
-const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000') + '/auth'
+const AuthContext = createContext(null)
 
-// Helper for making authenticated requests
-async function apiFetch(endpoint, options = {}) {
-  const token = localStorage.getItem('grace_token')
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-    ...options,
-  })
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Something went wrong' }))
-    throw new Error(error.detail || 'Request failed')
+  // Check for existing session on mount
+  useEffect(() => {
+    const token = localStorage.getItem('grace_token')
+    if (token) {
+      authApi.getMe()
+        .then((userData) => {
+          setUser(userData)
+          setLoading(false)
+        })
+        .catch(() => {
+          localStorage.removeItem('grace_token')
+          setLoading(false)
+        })
+    } else {
+      setLoading(false)
+    }
+  }, [])
+
+  async function login(email, password) {
+    const response = await authApi.login(email, password)
+    if (response.access_token) {
+      localStorage.setItem('grace_token', response.access_token)
+      setUser(response.user)
+    }
+    return response
   }
 
-  return response.json()
+  async function signup(name, email, password, dob) {
+    const response = await authApi.signup(name, email, password, dob)
+    // NOTE: after signup user is unverified — do NOT store token or set user.
+    // SignupPage handles the "check your inbox" state directly.
+    return response
+  }
+
+  /**
+   * completeOnboarding — called at the end of OnboardingPage.
+   * Sends financial profile to /auth/onboarding, updates user state,
+   * and cleans up localStorage draft data.
+   *
+   * @param {Object} data - { goals, income, expenses, debt, mission }
+   * @returns {Object} updated user object from server
+   */
+  async function completeOnboarding(data) {
+    const payload = {
+      monthly_income: data.income ? Number(data.income) : 0,
+      monthly_expenses: data.expenses ? Number(data.expenses) : 0,
+      financial_goal: data.mission || '',
+      onboarding_goals: data.goals || [],
+    }
+
+    const updatedUser = await authApi.completeOnboarding(payload)
+
+    // Update user state so onboarding_completed = true flows to guards
+    setUser(updatedUser)
+
+    // Clean up localStorage draft
+    localStorage.removeItem('grace-onboarding-complete')
+    localStorage.removeItem('grace-onboarding-data')
+
+    return updatedUser
+  }
+
+  /**
+   * updateIncome — lets users update income/expenses from Settings.
+   * Calls PATCH /auth/income and syncs user state.
+   */
+  async function updateIncome(monthly_income, monthly_expenses) {
+    const updatedUser = await authApi.updateIncome({ monthly_income, monthly_expenses })
+    setUser(updatedUser)
+    return updatedUser
+  }
+
+  function logout() {
+    localStorage.removeItem('grace_token')
+    localStorage.removeItem('grace-onboarding-complete')
+    localStorage.removeItem('grace-onboarding-data')
+    setUser(null)
+  }
+
+  return (
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      login,
+      signup,
+      logout,
+      completeOnboarding,
+      updateIncome,
+    }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
-export const authApi = {
-  // ─── Login ────────────────────────────────────────────────
-  async login(email, password) {
-    return apiFetch('/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    })
-  },
-
-  // ─── Signup ───────────────────────────────────────────────
-  async signup(fullName, email, password, dob) {
-    // Split "Zachary Lajeunesse" into first_name + last_name
-    const parts = fullName.trim().split(/\s+/)
-    const firstName = parts[0] || ''
-    const lastName = parts.slice(1).join(' ') || ''
-
-    return apiFetch('/signup', {
-      method: 'POST',
-      body: JSON.stringify({
-        first_name: firstName,
-        last_name: lastName,
-        email: email,
-        password: password,
-        date_of_birth: dob,  // ← 18+ gate, required by backend
-      }),
-    })
-  },
-
-  // ─── Get Current User (validates token) ────────────────────
-  async getMe() {
-    return apiFetch('/me')
-  },
-
-  // ─── Complete Onboarding ──────────────────────────────────
-  // Saves income, expenses, mission, and goal categories to the DB.
-  // Grace AI reads all of this on every conversation after this point.
-  // Called by AuthContext.completeOnboarding() at end of OnboardingPage.
-  async completeOnboarding(payload) {
-    // payload: { monthly_income, monthly_expenses, financial_goal, onboarding_goals }
-    return apiFetch('/onboarding', {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    })
-  },
-
-  // ─── Update Income (from Settings page) ──────────────────
-  // Allows users to update their income/expenses after onboarding.
-  // Grace AI picks up the new numbers on the next conversation.
-  async updateIncome(payload) {
-    // payload: { monthly_income?, monthly_expenses? }
-    return apiFetch('/income', {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    })
-  },
-
-  // ─── Forgot Password ─────────────────────────────────────
-  // Always returns 200 — backend never reveals if email exists.
-  async forgotPassword(email) {
-    return apiFetch('/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    })
-  },
-
-  // ─── Reset Password ───────────────────────────────────────
-  // Called from the reset-password page with token from email link.
-  async resetPassword(token, newPassword) {
-    return apiFetch('/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ token, new_password: newPassword }),
-    })
-  },
-
-  // ─── Resend Verification Email ────────────────────────────
-  // Called from SignupPage and LoginPage when user hasn't verified yet.
-  async resendVerification(email) {
-    return apiFetch('/resend-verification', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    })
-  },
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
 }
