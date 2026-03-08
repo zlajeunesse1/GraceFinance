@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 
+// ── Single source of truth — matches tier_config.py exactly ──
 const TIERS = [
   {
     id: "free",
@@ -16,7 +17,6 @@ const TIERS = [
       "10 Grace AI messages/month",
       "GraceFinance Index access",
     ],
-    cta: "Current Plan",
     highlighted: false,
   },
   {
@@ -28,11 +28,11 @@ const TIERS = [
     features: [
       "Everything in Free",
       "100 Grace AI messages/month",
-      "Faster FCS updates",
+      "FCS trend history (90 days)",
       "Behavioral trend insights",
+      "Data export (CSV & PDF)",
       "Priority support",
     ],
-    cta: "Upgrade to Pro",
     highlighted: true,
     badge: "Most Popular",
   },
@@ -45,14 +45,19 @@ const TIERS = [
     features: [
       "Everything in Pro",
       "Unlimited Grace AI messages",
-      "Real-time FCS updates",
       "Advanced behavioral analytics",
+      "BSI insights & pattern detection",
+      "Full FCS history (365 days)",
       "Early access to new features",
     ],
-    cta: "Upgrade to Premium",
     highlighted: false,
   },
 ]
+
+const getApiBase = () =>
+  window.location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : "https://gracefinance-production.up.railway.app"
 
 export default function UpgradePage() {
   const [interval, setInterval] = useState("monthly")
@@ -62,14 +67,17 @@ export default function UpgradePage() {
   const navigate = useNavigate()
 
   const currentTier = (user?.subscription_tier || "free").toLowerCase()
+  const tierRank = { free: 0, pro: 1, premium: 2 }
 
-  const yearlySavings = {
-    pro: Math.round((9.99 * 12 - 99) * 10) / 10,
-    premium: Math.round((29.99 * 12 - 299.99) * 10) / 10,
+  const getYearlySavings = (tier) => {
+    if (tier.price.monthly === 0) return 0
+    return Math.round((tier.price.monthly * 12 - tier.price.yearly) * 100) / 100
   }
 
+  const maxSavings = Math.max(...TIERS.map(getYearlySavings))
+
   const handleUpgrade = async (tierId) => {
-    if (tierId === "free" || tierId === currentTier) return
+    if (tierId === "free" || (tierRank[tierId] ?? 0) <= (tierRank[currentTier] ?? 0)) return
     setLoading(tierId)
     setError(null)
     try {
@@ -92,17 +100,20 @@ export default function UpgradePage() {
     }
   }
 
-  const getApiBase = () => {
-    return window.location.hostname === "localhost"
-      ? "http://localhost:8000"
-      : "https://gracefinance-production.up.railway.app"
-  }
-
   const getPrice = (tier) => {
     if (tier.price.monthly === 0) return "Free"
     const p = interval === "yearly" ? tier.price.yearly / 12 : tier.price.monthly
     return `$${p.toFixed(2)}`
   }
+
+  const getCtaLabel = (tier) => {
+    const targetRank = tierRank[tier.id] ?? 0
+    const currentRank = tierRank[currentTier] ?? 0
+    if (targetRank <= currentRank) return "Current Plan"
+    return `Upgrade to ${tier.name}`
+  }
+
+  const isCurrent = (tierId) => (tierRank[tierId] ?? 0) <= (tierRank[currentTier] ?? 0)
 
   return (
     <div style={styles.page}>
@@ -131,7 +142,7 @@ export default function UpgradePage() {
             onClick={() => setInterval("yearly")}
           >
             Yearly
-            <span style={styles.saveBadge}>Save up to ${yearlySavings.premium}</span>
+            <span style={styles.saveBadge}>Save up to ${maxSavings.toFixed(0)}</span>
           </button>
         </div>
       </div>
@@ -141,7 +152,7 @@ export default function UpgradePage() {
       {/* Tier Cards */}
       <div style={styles.cards}>
         {TIERS.map((tier) => {
-          const isCurrent = tier.id === currentTier
+          const current = isCurrent(tier.id)
           const isHighlighted = tier.highlighted
           const isLoading = loading === tier.id
 
@@ -151,11 +162,11 @@ export default function UpgradePage() {
               style={{
                 ...styles.card,
                 ...(isHighlighted ? styles.cardHighlighted : {}),
-                ...(isCurrent ? styles.cardCurrent : {}),
+                ...(current ? styles.cardCurrent : {}),
               }}
             >
-              {tier.badge && <div style={styles.badge}>{tier.badge}</div>}
-              {isCurrent && !tier.badge && <div style={styles.currentBadge}>Your Plan</div>}
+              {tier.badge && !current && <div style={styles.badge}>{tier.badge}</div>}
+              {current && <div style={styles.currentBadge}>Your Plan</div>}
 
               <div style={styles.tierName}>{tier.name}</div>
               <div style={styles.priceRow}>
@@ -167,7 +178,7 @@ export default function UpgradePage() {
 
               {interval === "yearly" && tier.price.monthly > 0 && (
                 <div style={styles.yearlyNote}>
-                  ${tier.price.yearly}/year · saves ${yearlySavings[tier.id]}
+                  ${tier.price.yearly}/year — save ${getYearlySavings(tier).toFixed(2)}
                 </div>
               )}
 
@@ -193,18 +204,16 @@ export default function UpgradePage() {
               <button
                 style={{
                   ...styles.ctaBtn,
-                  ...(isHighlighted && !isCurrent ? styles.ctaBtnHighlighted : {}),
-                  ...(isCurrent ? styles.ctaBtnDisabled : {}),
+                  ...(isHighlighted && !current ? styles.ctaBtnHighlighted : {}),
+                  ...(current ? styles.ctaBtnDisabled : {}),
                 }}
                 onClick={() => handleUpgrade(tier.id)}
-                disabled={isCurrent || isLoading || tier.id === "free"}
+                disabled={current || isLoading}
               >
                 {isLoading ? (
                   <span style={styles.spinner}>●</span>
-                ) : isCurrent ? (
-                  "Current Plan"
                 ) : (
-                  tier.cta
+                  getCtaLabel(tier)
                 )}
               </button>
             </div>
@@ -212,9 +221,13 @@ export default function UpgradePage() {
         })}
       </div>
 
-      {/* Usage meter for free users */}
-      {currentTier === "free" && user?.ai_messages_used !== undefined && (
-        <UsageMeter used={user.ai_messages_used} limit={10} />
+      {/* Usage meter — shown for users below Premium */}
+      {currentTier !== "premium" && user?.ai_messages_used !== undefined && (
+        <UsageMeter
+          used={user.ai_messages_used}
+          limit={currentTier === "pro" ? 100 : 10}
+          tier={currentTier}
+        />
       )}
 
       <p style={styles.footer}>
@@ -224,7 +237,7 @@ export default function UpgradePage() {
   )
 }
 
-function UsageMeter({ used, limit }) {
+function UsageMeter({ used, limit, tier }) {
   const pct = Math.min((used / limit) * 100, 100)
   const color = pct >= 90 ? "#ef4444" : pct >= 70 ? "#f59e0b" : "#10b981"
 
@@ -237,8 +250,13 @@ function UsageMeter({ used, limit }) {
       <div style={styles.meterTrack}>
         <div style={{ ...styles.meterFill, width: `${pct}%`, background: color }} />
       </div>
-      {pct >= 100 && (
-        <p style={styles.meterWarning}>You've hit your limit. Upgrade to keep coaching with Grace.</p>
+      {pct >= 90 && (
+        <p style={styles.meterWarning}>
+          {pct >= 100
+            ? `You've hit your ${tier === "free" ? "Free" : "Pro"} limit. Upgrade to keep coaching with Grace.`
+            : `Almost at your limit — ${limit - used} messages remaining this month.`
+          }
+        </p>
       )}
     </div>
   )
@@ -353,34 +371,36 @@ const styles = {
     gap: "12px",
   },
   cardHighlighted: {
-    border: "1px solid #fff",
+    border: "1px solid #10b981",
     background: "#141414",
   },
   cardCurrent: {
     border: "1px solid #333",
-    opacity: 0.8,
   },
   badge: {
     position: "absolute",
     top: "-12px",
     left: "50%",
     transform: "translateX(-50%)",
-    background: "#fff",
-    color: "#000",
+    background: "#111",
+    color: "#10b981",
+    border: "1px solid #10b981",
     fontSize: "11px",
     fontWeight: "700",
     padding: "4px 14px",
     borderRadius: "20px",
     letterSpacing: "0.5px",
     whiteSpace: "nowrap",
+    textTransform: "uppercase",
   },
   currentBadge: {
     position: "absolute",
     top: "-12px",
     left: "50%",
     transform: "translateX(-50%)",
-    background: "#333",
-    color: "#999",
+    background: "#1a1a1a",
+    color: "#888",
+    border: "1px solid #333",
     fontSize: "11px",
     fontWeight: "600",
     padding: "4px 14px",
@@ -478,9 +498,9 @@ const styles = {
     transition: "all 0.2s",
   },
   ctaBtnHighlighted: {
-    background: "#fff",
-    color: "#000",
-    border: "1px solid #fff",
+    background: "linear-gradient(135deg, #10b981, #059669)",
+    color: "#fff",
+    border: "1px solid #10b981",
   },
   ctaBtnDisabled: {
     opacity: 0.4,

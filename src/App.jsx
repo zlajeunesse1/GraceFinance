@@ -12,6 +12,7 @@ import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
 import OnboardingPage from './pages/OnboardingPage'
 import UpgradePage from './pages/UpgradePage'
+import PricingPage from './pages/PricingPage'
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
 
         <Route path="/onboarding" element={<RequireAuth><OnboardingWrapper /></RequireAuth>} />
 

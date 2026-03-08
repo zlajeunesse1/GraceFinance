@@ -1,13 +1,9 @@
 """
-GraceFinance — Grace AI Coach Service (v3.2)
+GraceFinance — Grace AI Coach Service (v3.3)
 ==============================================
-CHANGES FROM v3.1:
-  - Added AI usage enforcement by subscription tier
-  - Free:    10 messages/month
-  - Pro:     100 messages/month  
-  - Premium: unlimited
-  - check_ai_usage() — raises HTTPException 429 if limit hit
-  - increment_ai_usage() — bumps counter, resets monthly
+CHANGES FROM v3.2:
+  - AI_USAGE_LIMITS now imported from tier_config.py (single source of truth)
+  - All other logic unchanged
 """
 
 import os
@@ -28,12 +24,8 @@ except ImportError:
     HAS_ENGINE = False
 
 
-# ── AI Usage Limits by Tier ──────────────────────────────────────────────────
-AI_USAGE_LIMITS = {
-    "free":    10,
-    "pro":     100,
-    "premium": None,   # unlimited
-}
+# ── AI Usage Limits — pulled from single source of truth ─────────────────────
+from app.services.tier_config import AI_MESSAGE_LIMITS as AI_USAGE_LIMITS
 
 
 def check_ai_usage(db: Session, user) -> dict:

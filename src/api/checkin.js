@@ -27,6 +27,34 @@ async function apiFetch(endpoint, options = {}) {
     ...options,
   });
 
+  // ── Tier gating: feature locked (Pro+ or Premium required) ──
+  if (response.status === 403) {
+    const error = await response.json().catch(() => ({ detail: 'Access denied' }));
+    if (error.detail?.code === 'feature_locked') {
+      // Redirect to upgrade page with context
+      const tier = error.detail.required_tier || 'pro';
+      window.location.href = `/upgrade?reason=feature_locked&feature=${error.detail.feature}&tier=${tier}`;
+      return;
+    }
+    throw new Error(error.detail?.message || error.detail || 'Access denied');
+  }
+
+  // ── AI message limit reached ──
+  if (response.status === 429) {
+    const error = await response.json().catch(() => ({ detail: 'Rate limited' }));
+    if (error.detail?.code === 'ai_limit_reached') {
+      // Return structured error so the Grace chat UI can show an upgrade prompt
+      throw {
+        isAILimit: true,
+        tier: error.detail.tier,
+        used: error.detail.used,
+        limit: error.detail.limit,
+        message: error.detail.message,
+      };
+    }
+    throw new Error(error.detail?.message || error.detail || 'Too many requests');
+  }
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Something went wrong' }));
     throw new Error(error.detail || 'Request failed');
@@ -60,11 +88,12 @@ export const checkinApi = {
   },
 
   // Get user's FCS metric history — use this for the trend chart only.
+  // Note: history depth is capped by tier (Free=7d, Pro=90d, Premium=365d)
   async getMetrics(days = 30) {
     return apiFetch(`/checkin/metrics?days=${days}`);
   },
 
-  // ── NEW: Progression / Unlock System ──
+  // ── Progression / Unlock System ──
   // Get behavioral unlock tier status.
   // Returns: { tiers, next_unlock, unlocked_features, total_checkins,
   //            current_streak, data_points, unlocked_count, total_tiers }
@@ -72,7 +101,7 @@ export const checkinApi = {
     return apiFetch('/progression/status');
   },
 
-  // Get the latest GF-RWI index
+  // Get the latest GF-RWI index (now includes contributors count)
   async getLatestIndex() {
     return apiFetch('/index/latest');
   },

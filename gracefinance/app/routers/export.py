@@ -3,8 +3,10 @@ GraceFinance — CSV Export Routes
 File: app/routers/export.py
 
 Endpoints:
-  GET /api/export/checkins    → download check-in history as CSV
-  GET /api/export/fcs-trend   → download FCS metric snapshots as CSV
+  GET /api/export/checkins    → download check-in history as CSV (Pro+)
+  GET /api/export/fcs-trend   → download FCS metric snapshots as CSV (Pro+)
+
+Tier gating: Free users receive HTTP 403 with upgrade prompt.
 """
 
 import csv
@@ -17,6 +19,7 @@ from sqlalchemy import asc
 
 from app.database import get_db
 from app.services.auth import get_current_user
+from app.services.tier_gate import require_feature
 from app.models import User
 from app.models.checkin import CheckInResponse, UserMetricSnapshot
 
@@ -42,13 +45,16 @@ def _csv_response(content: str, filename: str) -> Response:
 
 
 # ──────────────────────────────────────────────
-# 1. Export Check-In History
+# 1. Export Check-In History (Pro+)
 # ──────────────────────────────────────────────
 @router.get("/checkins")
 def export_checkin_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # ── Tier gate: Pro+ only ──
+    require_feature(current_user, "data_export_csv")
+
     checkins = (
         db.query(CheckInResponse)
         .filter(CheckInResponse.user_id == current_user.id)
@@ -79,13 +85,16 @@ def export_checkin_history(
 
 
 # ──────────────────────────────────────────────
-# 2. Export FCS Trend Data
+# 2. Export FCS Trend Data (Pro+)
 # ──────────────────────────────────────────────
 @router.get("/fcs-trend")
 def export_fcs_trend(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # ── Tier gate: Pro+ only ──
+    require_feature(current_user, "data_export_csv")
+
     snapshots = (
         db.query(UserMetricSnapshot)
         .filter(UserMetricSnapshot.user_id == current_user.id)
