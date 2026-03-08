@@ -34,7 +34,7 @@ export const authApi = {
   },
 
   // ─── Signup ───────────────────────────────────────────────
-  async signup(fullName, email, password) {
+  async signup(fullName, email, password, dob) {
     // Split "Zachary Lajeunesse" into first_name + last_name
     const parts = fullName.trim().split(/\s+/)
     const firstName = parts[0] || ''
@@ -47,6 +47,7 @@ export const authApi = {
         last_name: lastName,
         email: email,
         password: password,
+        date_of_birth: dob,  // ← 18+ gate, required by backend
       }),
     })
   },
@@ -82,7 +83,7 @@ export const authApi = {
   // ─── Forgot Password ─────────────────────────────────────
   // Always returns 200 — backend never reveals if email exists.
   async forgotPassword(email) {
-    return apiFetch('/forgot-password', {   // fixed: was '/forgot' (404)
+    return apiFetch('/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email }),
     })
@@ -94,6 +95,15 @@ export const authApi = {
     return apiFetch('/reset-password', {
       method: 'POST',
       body: JSON.stringify({ token, new_password: newPassword }),
+    })
+  },
+
+  // ─── Resend Verification Email ────────────────────────────
+  // Called from SignupPage and LoginPage when user hasn't verified yet.
+  async resendVerification(email) {
+    return apiFetch('/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
     })
   },
 }
