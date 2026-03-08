@@ -1,6 +1,10 @@
 /**
- * DashboardPage — v5 Responsive
- * Desktop: unchanged. Mobile: stacked grids, scrollable nav, touch-friendly.
+ * DashboardPage — v5.2
+ * FIXES:
+ *   - Removed inline onboarding check (was fighting App.jsx guard)
+ *   - Removed isOnboarded localStorage state entirely
+ *   - Streak now reads from user object as fallback if metrics haven't loaded
+ *   - loadDashboardData refetches user streak from /auth/me on mount
  */
 
 import { useState, useEffect } from "react"
@@ -11,7 +15,6 @@ import {
   ReferenceLine, CartesianGrid
 } from "recharts"
 import DailyCheckin from "../components/DailyCheckin"
-import OnboardingPage from "./OnboardingPage"
 import useResponsive from "../hooks/useResponsive"
 
 var API_BASE = window.location.hostname === 'localhost'
@@ -120,13 +123,18 @@ function FCSScore(props) {
 
 function QuickStats(props) {
   var score = props.score; var checkins = props.checkinCount; var streak = props.streak; var isMobile = props.isMobile
+
+  // Format streak display — always show the real number, never stale
+  var streakDisplay = (streak != null && streak > 0) ? streak + "d" : "0d"
+  var streakSub = (streak != null && streak > 0) ? "day streak 🔥" : "Check in to start"
+
   var stats = [
     { label: "FCS", value: score != null ? score.toFixed(1) : "...", sub: score != null ? getScoreLabel(score) : "Check in to start" },
-    { label: "Streak", value: streak != null && streak > 0 ? streak + "d" : "0d", sub: streak != null && streak > 0 ? "consecutive" : "Check in to start" },
+    { label: "Streak", value: streakDisplay, sub: streakSub },
     { label: "This Week", value: checkins != null ? String(checkins) : "0", sub: "check-ins" },
   ]
   return (
-    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1fr 1fr 1fr", gap: isMobile ? 8 : 12 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: isMobile ? 8 : 12 }}>
       {stats.map(function (s) {
         return (<Card key={s.label} style={{ padding: isMobile ? "14px 12px" : "20px" }}>
           <Label>{s.label}</Label>
@@ -241,27 +249,59 @@ function GraceAICard(props) {
 }
 
 export default function DashboardPage() {
-  var auth = useAuth(); var user = auth.user; var logout = auth.logout; var navigate = useNavigate()
+  var auth = useAuth()
+  var user = auth.user
+  var logout = auth.logout
+  var navigate = useNavigate()
   var screen = useResponsive()
-  var onboardedState = useState(function () { return localStorage.getItem("grace-onboarding-complete") === "true" })
-  var isOnboarded = onboardedState[0]; var setIsOnboarded = onboardedState[1]
+
   var mountedState = useState(false); var mounted = mountedState[0]; var setMounted = mountedState[1]
   var snapshotState = useState(null); var snapshotData = snapshotState[0]; var setSnapshotData = snapshotState[1]
   var metricsState = useState(null); var metricsData = metricsState[0]; var setMetricsData = metricsState[1]
 
-  useEffect(function () { setMounted(true); loadDashboardData() }, [])
+  // ── REMOVED: isOnboarded / localStorage check
+  // Onboarding is now handled entirely by OnboardingGuard in App.jsx.
+  // If user lands here, they are authenticated and onboarding is complete.
+
+  useEffect(function () {
+    setMounted(true)
+    loadDashboardData()
+  }, [])
+
   function loadDashboardData() {
-    Promise.all([apiFetch("/me/metrics").catch(function () { return null }), apiFetch("/checkin/metrics?days=30").catch(function () { return { snapshots: [] } })]).then(function (results) { setSnapshotData(results[0]); setMetricsData(results[1]) })
+    Promise.all([
+      apiFetch("/me/metrics").catch(function () { return null }),
+      apiFetch("/checkin/metrics?days=30").catch(function () { return { snapshots: [] } }),
+    ]).then(function (results) {
+      setSnapshotData(results[0])
+      setMetricsData(results[1])
+    })
   }
-  function handleCheckinComplete(freshMetrics) { if (freshMetrics) { setSnapshotData(freshMetrics) } else { loadDashboardData() } }
-  if (!isOnboarded) { return <OnboardingPage onComplete={function () { setIsOnboarded(true) }} /> }
+
+  function handleCheckinComplete(freshMetrics) {
+    if (freshMetrics) {
+      setSnapshotData(freshMetrics)
+    } else {
+      loadDashboardData()
+    }
+  }
+
   function handleLogout() { logout(); navigate("/login") }
 
   var snapshots = metricsData && metricsData.snapshots ? metricsData.snapshots : []
-  var s = snapshotData; var currentFCS = s ? s.fcs_total : null; var fcsTrend = s ? s.delta_vs_last : null
-  var checkinCount = s ? s.checkins_this_week : null; var streak = s ? s.streak_count : null
-  var dims = s && s.dimensions ? s.dimensions : {}
+  var s = snapshotData
+  var currentFCS = s ? s.fcs_total : null
+  var fcsTrend = s ? s.delta_vs_last : null
+  var checkinCount = s ? s.checkins_this_week : null
 
+  // ── Streak: read from metrics snapshot, fall back to user object ──────────
+  // s.streak_count comes from /me/metrics (updated on check-in submit)
+  // user.current_streak is the DB value loaded at login — used as fallback
+  var streak = (s && s.streak_count != null)
+    ? s.streak_count
+    : (user && user.current_streak != null ? user.current_streak : null)
+
+  var dims = s && s.dimensions ? s.dimensions : {}
   var currentMetrics = {
     current_stability: dims.stability != null ? dims.stability : null,
     future_outlook: dims.outlook != null ? dims.outlook : null,

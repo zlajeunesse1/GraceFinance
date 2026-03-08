@@ -1,13 +1,12 @@
 """
-Question Bank — v6.1 (Full Audit: Temporal Tags + Consistency Traps)
-═════════════════════════════════════════════════════════════════════
-CHANGES FROM v6.0:
-  - Added QUESTION_TEMPORAL_SCOPE dict tagging each question as
-    "week", "month", or "general" for temporal window weighting
-  - Added consistency trap questions (CT-*): rephrased versions of
-    existing behavioral probes. If a user answers CS-1 as 5/5 but
-    CT-CS-1 as 2/5 on a different day, that's a coherence signal.
-  - Total: 72 daily questions + 5 weekly BSI + 5 consistency traps
+Question Bank — v6.2
+═════════════════════
+CHANGES FROM v6.1:
+  - is_weekly_checkin_day() now always returns False
+    Weekly BSI questions (BX-*) are disabled from the daily check-in flow.
+    Always 5 questions. Clean, fast, consistent experience every day.
+    BSI data can be reactivated later via a dedicated weekly prompt or
+    a separate endpoint when the UX is ready for it.
 """
 
 import random
@@ -128,7 +127,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "How well do you know the exact amount of your fixed monthly expenses?",
         "current_stability", "1-10", 10,
         low_label="No idea", high_label="Know every dollar"),
-    # Consistency traps
     "CT-CS-1": CheckInQuestion("CT-CS-1",
         "If all your bills were due tomorrow, could you pay every one of them?",
         "current_stability", "1-5", 5,
@@ -188,7 +186,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "Compared to this time last year, is your financial situation better, the same, or worse?",
         "future_outlook", "1-5", 5,
         low_label="Much worse", high_label="Much better"),
-    # Consistency traps
     "CT-FO-1": CheckInQuestion("CT-FO-1",
         "Are you closer to your biggest financial goal than you were last month?",
         "future_outlook", "1-5", 5,
@@ -248,7 +245,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "How would you rate your ability to cover an unexpected car or home repair right now?",
         "purchasing_power", "1-10", 10,
         low_label="Could not cover it", high_label="Fully prepared"),
-    # Consistency traps
     "CT-PP-1": CheckInQuestion("CT-PP-1",
         "How tight is your budget right now after paying for essentials?",
         "purchasing_power", "1-5", 5,
@@ -312,7 +308,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "How would you rate your preparedness for a job loss or income reduction?",
         "emergency_readiness", "1-5", 5,
         low_label="Completely unprepared", high_label="Well prepared with a plan"),
-    # Consistency traps
     "CT-ER-1": CheckInQuestion("CT-ER-1",
         "If a $500 bill showed up today, would you need to borrow to pay it?",
         "emergency_readiness", "yes_no_scale", 5,
@@ -376,7 +371,6 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
         "How confident are you in your ability to make smart financial decisions right now?",
         "financial_agency", "1-10", 10,
         low_label="Not confident at all", high_label="Very confident"),
-    # Consistency traps
     "CT-FA-1": CheckInQuestion("CT-FA-1",
         "How much time did you spend reviewing your finances in the past 7 days?",
         "financial_agency", "1-5", 5,
@@ -392,34 +386,26 @@ INVERTED_QUESTION_IDS = set()
 
 
 # ══════════════════════════════════════════
-#  TEMPORAL SCOPE TAGS (Audit #8)
-#  "week" = question references this week's behavior
-#  "month" = question references this month's behavior
-#  "general" = timeless or flexible reference
+#  TEMPORAL SCOPE TAGS
 # ══════════════════════════════════════════
 
 QUESTION_TEMPORAL_SCOPE: Dict[str, str] = {
-    # Stability
     "CS-1": "month", "CS-2": "month", "CS-3": "month", "CS-4": "general",
     "CS-5": "month", "CS-6": "week", "CS-7": "general", "CS-8": "general",
     "CS-9": "general", "CS-10": "month", "CS-11": "week", "CS-12": "general",
     "CT-CS-1": "general", "CT-CS-2": "month",
-    # Outlook
     "FO-1": "week", "FO-2": "month", "FO-3": "month", "FO-4": "general",
     "FO-5": "week", "FO-6": "general", "FO-7": "general", "FO-8": "month",
     "FO-9": "month", "FO-10": "general", "FO-11": "general", "FO-12": "general",
     "CT-FO-1": "month", "CT-FO-2": "month",
-    # Purchasing Power
     "PP-1": "general", "PP-2": "week", "PP-3": "week", "PP-4": "general",
     "PP-5": "week", "PP-6": "week", "PP-7": "month", "PP-8": "month",
     "PP-9": "general", "PP-10": "general", "PP-11": "month", "PP-12": "general",
     "CT-PP-1": "general", "CT-PP-2": "week",
-    # Emergency Readiness
     "ER-1": "general", "ER-2": "general", "ER-3": "week", "ER-4": "general",
     "ER-5": "month", "ER-6": "general", "ER-7": "general", "ER-8": "general",
     "ER-9": "general", "ER-10": "month", "ER-11": "general", "ER-12": "general",
     "ER-13": "general", "CT-ER-1": "general", "CT-ER-2": "general",
-    # Financial Agency
     "FA-1": "week", "FA-2": "general", "FA-3": "week", "FA-4": "general",
     "FA-5": "week", "FA-6": "general", "FA-7": "general", "FA-8": "month",
     "FA-9": "general", "FA-10": "month", "FA-11": "general", "FA-12": "week",
@@ -428,7 +414,7 @@ QUESTION_TEMPORAL_SCOPE: Dict[str, str] = {
 
 
 # ══════════════════════════════════════════
-#  WEEKLY BEHAVIORAL CROSSOVER (BSI)
+#  WEEKLY BSI QUESTIONS (kept for future use, not served in daily flow)
 # ══════════════════════════════════════════
 
 WEEKLY_QUESTIONS: Dict[str, CheckInQuestion] = {
@@ -456,7 +442,7 @@ WEEKLY_QUESTIONS: Dict[str, CheckInQuestion] = {
 
 
 # ══════════════════════════════════════════
-#  DIMENSION ROTATION POOLS (with traps)
+#  DIMENSION ROTATION POOLS
 # ══════════════════════════════════════════
 
 DIMENSION_POOLS: Dict[str, List[str]] = {
@@ -500,10 +486,13 @@ def get_weekly_questions():
     return list(WEEKLY_QUESTIONS.values())
 
 
-def is_weekly_checkin_day(target_date=None):
-    if target_date is None:
-        target_date = _utc_today()
-    return target_date.weekday() == 6
+def is_weekly_checkin_day(target_date=None) -> bool:
+    """
+    Always returns False — weekly BSI questions are disabled from the daily flow.
+    Users always get exactly 5 questions. Clean, consistent, no Sunday surprise.
+    Re-enable when a dedicated BSI prompt or separate flow is built.
+    """
+    return False
 
 
 def get_todays_questions(user_id, target_date=None):
@@ -511,15 +500,10 @@ def get_todays_questions(user_id, target_date=None):
         target_date = _utc_today()
 
     daily = get_daily_questions(user_id, target_date)
-    result = {
+
+    return {
         "date": target_date.isoformat(),
         "daily_questions": daily,
-        "weekly_questions": [],
+        "weekly_questions": [],   # BSI disabled — always empty
         "is_weekly_day": False,
     }
-
-    if is_weekly_checkin_day(target_date):
-        result["weekly_questions"] = get_weekly_questions()
-        result["is_weekly_day"] = True
-
-    return result

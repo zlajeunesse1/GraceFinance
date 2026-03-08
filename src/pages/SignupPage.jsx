@@ -1,6 +1,8 @@
 /**
- * SignupPage — v5 Responsive
- * Desktop: side-by-side. Mobile: stacked, form-first.
+ * SignupPage — v5.1
+ * FIX: Redirects to /onboarding after signup (was /dashboard)
+ *      New users must complete onboarding before hitting the dashboard.
+ *      This closes the onboarding loop permanently.
  */
 
 import { useState } from 'react'
@@ -33,7 +35,10 @@ export default function SignupPage() {
     if (!agreed) errs.agreed = 'You must agree to continue'
     setErrors(errs); if (Object.keys(errs).length > 0) return
     setLoading(true)
-    try { await signup(name, email, password); navigate('/dashboard') }
+    try {
+      await signup(name, email, password)
+      navigate('/onboarding')  // ← FIX: was '/dashboard', caused onboarding loop
+    }
     catch (err) { setApiError(err.message || 'Signup failed. Try again.') }
     finally { setLoading(false) }
   }
