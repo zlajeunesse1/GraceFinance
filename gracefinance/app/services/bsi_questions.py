@@ -47,6 +47,19 @@ class BSIQuestion:
 
 
 # ═══════════════════════════════════════════════════════════════
+#  PATTERN LABELS — used across bsi_engine, bsi_router, weekly_report
+# ═══════════════════════════════════════════════════════════════
+
+PATTERN_LABELS = {
+    "subscription_churn":   "Subscription Churn",
+    "credit_substitution":  "Credit Substitution",
+    "deferred_spending":    "Deferred Spending",
+    "debt_accumulation":    "Debt Accumulation",
+    "financial_avoidance":  "Financial Avoidance",
+}
+
+
+# ═══════════════════════════════════════════════════════════════
 #  PATTERN 1: SUBSCRIPTION CHURN
 #  Signal: Are they cutting recurring costs?
 #  Key insight: WHY determines if it's stress or optimization
