@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
 from uuid import UUID
 from app.models.models import SubscriptionTier, DebtType, TransactionCategory, BillStatus
 
@@ -12,6 +12,7 @@ class UserSignup(BaseModel):
     password: str
     first_name: str
     last_name: Optional[str] = ""
+    date_of_birth: date  # required — 18+ enforced in auth_router
 
 
 class UserLogin(BaseModel):
@@ -32,6 +33,9 @@ class UserResponse(BaseModel):
     email: str
     first_name: str
     last_name: str
+
+    # Email verification
+    email_verified: bool = False
 
     # Financial profile — Optional so new users (NULL in DB) don't break
     monthly_income: Optional[float] = None
