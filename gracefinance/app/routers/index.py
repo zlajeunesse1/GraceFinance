@@ -2,7 +2,7 @@
 Index Router — Grace Financial Confidence Index (GFCI)
 ═══════════════════════════════════════════════════════
 Endpoints:
-  GET  /index/latest            → Current GFCI composite + pillar breakdown
+  GET  /index/latest            → Current GFCI composite + pillar breakdown + contributor count
   GET  /index/history           → GFCI over time for trending
   POST /index/compute           → Manually trigger index computation (dev/admin)
   POST /index/reset             → Wipe index data and start fresh (dev only)
@@ -15,14 +15,14 @@ Wired to: app/services/gfci_engine.py (v4 institutional engine)
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import desc, func as sqlfunc, distinct
 
 from app.database import get_db
 from app.services.gfci_engine import (
     compute_daily_gfci,
     get_gfci_history,
 )
-from app.models.checkin import DailyIndex
-from sqlalchemy import desc
+from app.models.checkin import DailyIndex, CheckInResponse
 
 
 router = APIRouter(prefix="/index", tags=["GFCI Index"])
@@ -33,7 +33,7 @@ def latest_index(
     segment: str = "national",
     db: Session = Depends(get_db),
 ):
-    """Get the most recent GFCI composite and trend data."""
+    """Get the most recent GFCI composite, trend data, and contributor count."""
     index = (
         db.query(DailyIndex)
         .filter(DailyIndex.segment == segment)
@@ -41,11 +41,17 @@ def latest_index(
         .first()
     )
 
+    # Total unique users who have ever submitted a check-in
+    contributor_count = (
+        db.query(sqlfunc.count(distinct(CheckInResponse.user_id))).scalar() or 0
+    )
+
     if not index:
         return {
             "published": False,
             "message": "No index data yet. Need check-ins from users first.",
             "gfci_composite": None,
+            "contributors": contributor_count,
         }
 
     return {
@@ -55,6 +61,7 @@ def latest_index(
         "gfci_composite": index.gf_rwi_composite,
         "fcs_average": index.fcs_value,
         "user_count": index.user_count,
+        "contributors": contributor_count,
         "trend_direction": index.trend_direction,
         "gci_slope_3d": index.gci_slope_3d,
         "gci_slope_7d": index.gci_slope_7d,
@@ -94,7 +101,7 @@ def trigger_compute(
 ):
     """
     Manually trigger GFCI computation.
-    In production, this runs on a nightly scheduler.
+    In production, this runs on a nightly scheduler (12:05 AM ET).
     For dev/testing, hit this endpoint to compute on demand.
     """
     index = compute_daily_gfci(db, segment)
@@ -131,7 +138,7 @@ def reset_user_data(
     db: Session = Depends(get_db),
 ):
     """Dev tool — wipe all checkin responses, snapshots, index data, and reset streaks."""
-    from app.models.checkin import CheckInResponse, UserMetricSnapshot
+    from app.models.checkin import UserMetricSnapshot
     from sqlalchemy import text
     r1 = db.query(CheckInResponse).delete()
     r2 = db.query(UserMetricSnapshot).delete()
@@ -223,5 +230,5 @@ def methodology():
             "Minimum participation thresholds for confident scores",
             "Consistency weighting rewards regular engagement",
         ],
-        "computation_schedule": "Daily at 00:05 UTC",
+        "computation_schedule": "Daily at 12:05 AM ET (05:05 UTC)",
     }

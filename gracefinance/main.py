@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.config import get_settings
-from app.database import engine, Base
+from app.database import engine, Base, SessionLocal
 from app.routers import (
     auth_router,
     dashboard_router,
@@ -29,11 +29,32 @@ from app.routers.legal_routes import router as legal_router
 from app.routers.export import router as export_router
 from app.routers import me_router
 from app.services.daily_emails import send_daily_engagement_emails
+from app.services.gfci_engine import compute_daily_gfci
 
 settings = get_settings()
 
 # Create tables (use Alembic migrations in production)
 Base.metadata.create_all(bind=engine)
+
+
+# ── Scheduled Jobs ────────────────────────────────────────────────────────────
+
+def scheduled_index_compute():
+    """Recompute GF-RWI daily — safety net so the index never goes stale."""
+    db = SessionLocal()
+    try:
+        compute_daily_gfci(db)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+def scheduled_daily_emails():
+    """Wrapper for daily engagement emails with its own DB session."""
+    send_daily_engagement_emails()
+
 
 # ── App initialization ──
 is_prod = settings.app_env == "production"
@@ -46,16 +67,31 @@ app = FastAPI(
     redoc_url=None if is_prod else "/redoc",
 )
 
-# ── Daily Engagement Emails — 8:00 AM EST (13:00 UTC) ──
+# ── Scheduler — all times in UTC ─────────────────────────────────────────────
 scheduler = BackgroundScheduler()
+
+# Daily engagement emails — 8:00 AM EST (13:00 UTC)
 scheduler.add_job(
-    send_daily_engagement_emails,
+    scheduled_daily_emails,
     "cron",
     hour=13,
     minute=0,
     id="daily_engagement_email",
     replace_existing=True,
 )
+
+# Daily index recompute — 12:05 AM EST (05:05 UTC)
+# Fires just after midnight ET so the index refreshes every day,
+# even if no one checks in. Also handles the date rollover cleanly.
+scheduler.add_job(
+    scheduled_index_compute,
+    "cron",
+    hour=5,
+    minute=5,
+    id="daily_index_compute",
+    replace_existing=True,
+)
+
 scheduler.start()
 
 # ── CORS — explicit origins only, no wildcards ──

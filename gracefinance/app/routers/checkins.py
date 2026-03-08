@@ -6,17 +6,17 @@ Endpoints:
   POST /checkin/submit          → Submit answers — enforces ONE check-in per user per day
   GET  /checkin/metrics         → User's FCS metric snapshots over time
   POST /checkin/reset           → Dev tool — clear today's check-in (ADMIN ONLY)
-  POST /checkin/migrate-v51     → Dev tool — add v5.1 audit columns
 
 Data quality rule:
-  One check-in per user per calendar day (UTC). Enforced at the server level on
-  both endpoints.
+  One check-in per user per calendar day (Eastern Time). Enforced at the server
+  level on both endpoints. Resets at midnight ET (handles DST automatically).
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, and_, text
 from datetime import datetime, timezone, timedelta, date
+from zoneinfo import ZoneInfo
 
 from app.database import get_db
 from app.models import User
@@ -44,23 +44,32 @@ router = APIRouter(prefix="/checkin", tags=["Check-In"])
 
 ADMIN_EMAILS = {"zaclajeunesse1@gmail.com"}
 
+# ── Timezone: all "today" logic anchored to Eastern Time ──────────────────────
+EASTERN = ZoneInfo("America/New_York")
+
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
 
-def _utc_today_bounds():
-    """Return (today_start, tomorrow_start) as UTC-aware datetimes."""
-    now_utc = datetime.now(timezone.utc)
-    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-    tomorrow_start = today_start + timedelta(days=1)
-    return today_start, tomorrow_start
+def _est_today_bounds():
+    """
+    Return (today_start, tomorrow_start) as UTC-aware datetimes,
+    but anchored to the Eastern Time calendar day.
+
+    This means a check-in resets at midnight ET every night,
+    and handles EST ↔ EDT (daylight saving) automatically.
+    """
+    now_et = datetime.now(EASTERN)
+    today_start_et = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow_start_et = today_start_et + timedelta(days=1)
+    return today_start_et.astimezone(timezone.utc), tomorrow_start_et.astimezone(timezone.utc)
 
 
 def _has_checked_in_today(db: Session, user_id) -> bool:
     """
-    Returns True if the user has ANY check-in response recorded today (UTC).
-    Uses explicit UTC boundaries — no timezone ambiguity.
+    Returns True if the user has ANY check-in response recorded today (Eastern Time).
+    Uses explicit ET-anchored boundaries converted to UTC for the query.
     """
-    today_start, tomorrow_start = _utc_today_bounds()
+    today_start, tomorrow_start = _est_today_bounds()
 
     count = (
         db.query(func.count(CheckInResponse.id))
@@ -91,18 +100,19 @@ def get_questions(
     Sundays: also includes 5 weekly BSI questions.
     Returns empty lists + already_completed=True if user already checked in today.
     """
-    today_utc = datetime.now(timezone.utc).date()
+    # Use Eastern Time for the display date and weekly check
+    today_et = datetime.now(EASTERN).date()
 
     if _has_checked_in_today(db, user.id):
         return TodaysQuestionsOut(
-            date=str(today_utc),
+            date=str(today_et),
             daily_questions=[],
             weekly_questions=[],
             is_weekly_day=False,
             already_completed=True,
         )
 
-    result = get_todays_questions(user.id, today_utc)
+    result = get_todays_questions(user.id, today_et)
 
     return TodaysQuestionsOut(
         date=result["date"],
@@ -151,7 +161,7 @@ def submit_checkin(
     Accept user's check-in answers, save them, compute updated metrics,
     recompute the GFCI in real-time, and return the reward payload.
 
-    DATA QUALITY: Returns HTTP 409 if user already submitted today.
+    DATA QUALITY: Returns HTTP 409 if user already submitted today (Eastern Time).
     """
     if not payload.answers:
         raise HTTPException(
@@ -159,7 +169,7 @@ def submit_checkin(
             detail="No answers provided.",
         )
 
-    # ── One check-in per day — hard server-side enforcement ──
+    # ── One check-in per day — hard server-side enforcement (Eastern Time) ──
     if _has_checked_in_today(db, user.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -237,7 +247,7 @@ def reset_today_checkin(
     user: User = Depends(get_current_user),
 ):
     """
-    Dev tool — delete the current user's check-in responses from today (UTC).
+    Dev tool — delete the current user's check-in responses from today (Eastern Time).
     Allows re-testing the check-in flow without waiting for the next day.
     RESTRICTED: Only admin emails can access this endpoint.
     """
@@ -247,7 +257,7 @@ def reset_today_checkin(
             detail="Admin access required.",
         )
 
-    today_start, tomorrow_start = _utc_today_bounds()
+    today_start, tomorrow_start = _est_today_bounds()
 
     deleted = (
         db.query(CheckInResponse)
@@ -265,11 +275,8 @@ def reset_today_checkin(
 
     return {
         "message": f"Deleted {deleted} responses from today. Check-in unlocked.",
-        "date": str(datetime.now(timezone.utc).date()),
+        "date": str(datetime.now(EASTERN).date()),
     }
-
-
-
 
 
 # ──────────────────────────────────────────
