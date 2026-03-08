@@ -1,26 +1,25 @@
 /**
- * GraceChatPage — v5 Polish
- * Clean chat interface. Grace as your behavioral finance coach.
+ * GraceChatPage — with usage tracking and upgrade prompt
  */
-
 import { useNavigate } from 'react-router-dom'
 import GraceChat from '../components/GraceChat.jsx'
 
 export default function GraceChatPage() {
-  var navigate = useNavigate()
+  const navigate = useNavigate()
 
   return (
     <div style={{ minHeight: '100vh', background: '#000000', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: "'Geist', 'SF Pro Display', -apple-system, sans-serif" }}>
       <style>{"@import url('https://fonts.cdnfonts.com/css/geist');"}</style>
 
       <div style={{ width: '100%', maxWidth: 700, padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #141414', paddingBottom: 16 }}>
-        <button onClick={function () { navigate('/dashboard') }} style={{
-          background: 'transparent', border: '1px solid #222222', borderRadius: 6, padding: '8px 16px', color: '#9ca3af',
-          fontSize: 13, fontWeight: 500, fontFamily: "'Geist', 'SF Pro Display', -apple-system, sans-serif", cursor: 'pointer', transition: 'all 0.2s ease', letterSpacing: '0.01em',
-        }}
-          onMouseEnter={function (e) { e.target.style.borderColor = '#4b5563'; e.target.style.color = '#ffffff' }}
-          onMouseLeave={function (e) { e.target.style.borderColor = '#222222'; e.target.style.color = '#9ca3af' }}
-        >Dashboard</button>
+        <button
+          onClick={() => navigate('/dashboard')}
+          style={{ background: 'transparent', border: '1px solid #222222', borderRadius: 6, padding: '8px 16px', color: '#9ca3af', fontSize: 13, fontWeight: 500, fontFamily: "'Geist', sans-serif", cursor: 'pointer', letterSpacing: '0.01em' }}
+          onMouseEnter={e => { e.target.style.borderColor = '#4b5563'; e.target.style.color = '#ffffff' }}
+          onMouseLeave={e => { e.target.style.borderColor = '#222222'; e.target.style.color = '#9ca3af' }}
+        >
+          Dashboard
+        </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ textAlign: 'right' }}>
