@@ -7,6 +7,7 @@ Endpoints:
 
 FIX: checkins_this_week now counts distinct check-in DAYS, not individual
      question responses. 1 session × 5 questions was showing "5 check-ins".
+FIX: today uses UTC date to match stored timestamps — prevents check-in reappearing.
 
 Auth: JWT-scoped identity only. No user_id in request body or path.
 """
@@ -31,10 +32,6 @@ def _build_snapshot(
     streak: int,
     checkins_this_week: int,
 ) -> UserMetricsSnapshot:
-    """
-    Build the canonical UserMetricsSnapshot from DB rows.
-    Returns null for every field that has no real data yet — never 0.
-    """
     now = datetime.now(timezone.utc)
 
     if latest is None:
@@ -55,7 +52,6 @@ def _build_snapshot(
         delta = round(fcs - float(previous.fcs_composite), 2)
 
     def _dim(val):
-        """Return null if value is zero (uncomputed default), not a real score."""
         if val is None:
             return None
         f = float(val)
@@ -83,10 +79,6 @@ def get_metrics(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """
-    Returns the canonical UserMetricsSnapshot.
-    Powers all dashboard tiles, FCS card, dimension breakdown, and quick stats.
-    """
     latest = (
         db.query(UserMetricSnapshot)
         .filter(UserMetricSnapshot.user_id == user.id)
@@ -101,9 +93,6 @@ def get_metrics(
         .first()
     )
 
-    # ── FIX: count distinct calendar days, not individual response rows ──────
-    # Old: counted CheckInResponse rows → 5 questions = "5 check-ins"
-    # New: counts distinct dates → 1 session = "1 check-in"
     week_start = datetime.now(timezone.utc) - timedelta(days=7)
     checkins_this_week = (
         db.query(func.count(func.distinct(cast(CheckInResponse.checkin_date, Date))))
@@ -126,11 +115,8 @@ def get_today_status(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """
-    Returns whether the user has checked in today.
-    Used by DailyCheckin component to gate the banner.
-    """
-    today = date.today()
+    # FIX: use UTC date to match how timestamps are stored in DB
+    today = datetime.now(timezone.utc).date()
 
     today_count = (
         db.query(func.count(CheckInResponse.id))
