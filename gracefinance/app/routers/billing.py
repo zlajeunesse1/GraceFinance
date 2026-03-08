@@ -1,8 +1,5 @@
 """
-Billing Router — FIXED: UUID handling in Stripe webhook.
-
-The webhook was doing int(session["metadata"]["user_id"]) which crashes
-because user IDs are UUIDs, not integers. Now uses UUID() constructor.
+Billing Router — supports monthly/yearly for Pro and Premium tiers.
 """
 
 import stripe
@@ -31,15 +28,17 @@ def create_checkout_session(
 ):
     """Create a Stripe Checkout session for subscription upgrade."""
     price_map = {
-        "pro": settings.stripe_price_pro,
-        "premium": settings.stripe_price_premium,
+        ("pro", "monthly"):      settings.stripe_price_pro_monthly,
+        ("pro", "yearly"):       settings.stripe_price_pro_yearly,
+        ("premium", "monthly"):  settings.stripe_price_premium_monthly,
+        ("premium", "yearly"):   settings.stripe_price_premium_yearly,
     }
 
-    price_id = price_map.get(data.tier)
+    interval = getattr(data, "interval", "monthly") or "monthly"
+    price_id = price_map.get((data.tier, interval))
     if not price_id:
-        raise HTTPException(status_code=400, detail="Invalid tier")
+        raise HTTPException(status_code=400, detail="Invalid tier or interval")
 
-    # Create or reuse Stripe customer
     if not user.stripe_customer_id:
         customer = stripe.Customer.create(
             email=user.email,
@@ -56,7 +55,7 @@ def create_checkout_session(
         mode="subscription",
         success_url=f"{settings.frontend_url}/dashboard?upgraded=true",
         cancel_url=f"{settings.frontend_url}/dashboard?upgraded=false",
-        metadata={"user_id": str(user.id), "tier": data.tier},
+        metadata={"user_id": str(user.id), "tier": data.tier, "interval": interval},
     )
 
     return CheckoutResponse(checkout_url=session.url)
@@ -77,7 +76,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
-        user_id = UUID(session["metadata"]["user_id"])   # ← was int(), would crash
+        user_id = UUID(session["metadata"]["user_id"])
         tier = session["metadata"]["tier"]
 
         user = db.query(User).filter(User.id == user_id).first()
