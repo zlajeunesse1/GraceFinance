@@ -1,9 +1,11 @@
 /**
- * SignupPage — v6.2
- * ADDED: "See our plans" link to pricing page
+ * SignupPage — v6.3
+ * FIX: Terms/Privacy open as modals (fetches from /legal/ API)
+ * FIX: Links no longer navigate to raw JSON endpoints
+ * ADDED: Pricing link
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import useResponsive from '../hooks/useResponsive'
@@ -11,6 +13,66 @@ import useResponsive from '../hooks/useResponsive'
 var API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:8000'
   : 'https://gracefinance-production.up.railway.app'
+
+var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
+
+function LegalModal(props) {
+  var type = props.type
+  var onClose = props.onClose
+  var contentState = useState(null); var content = contentState[0]; var setContent = contentState[1]
+  var loadingState = useState(true); var isLoading = loadingState[0]; var setIsLoading = loadingState[1]
+
+  var titles = { terms: "Terms of Service", privacy: "Privacy Policy", refund: "Refund Policy" }
+
+  useEffect(function () {
+    setIsLoading(true)
+    fetch(API_BASE + "/legal/" + type)
+      .then(function (res) { return res.json() })
+      .then(function (data) { setContent(data); setIsLoading(false) })
+      .catch(function () { setContent(null); setIsLoading(false) })
+  }, [type])
+
+  function renderContent() {
+    if (isLoading) return <p style={{ color: '#9ca3af', fontSize: 13 }}>Loading...</p>
+    if (!content) return <p style={{ color: '#ef4444', fontSize: 13 }}>Failed to load. Please try again.</p>
+
+    if (typeof content === 'string') return <p style={{ color: '#ccc', fontSize: 13, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{content}</p>
+
+    if (content.sections) {
+      return content.sections.map(function (section, i) {
+        return (
+          <div key={i} style={{ marginBottom: 20 }}>
+            {section.title && <h3 style={{ color: '#fff', fontSize: 14, fontWeight: 600, margin: '0 0 8px' }}>{section.title}</h3>}
+            {section.content && <p style={{ color: '#ccc', fontSize: 13, lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{section.content}</p>}
+            {section.items && section.items.map(function (item, j) {
+              return <p key={j} style={{ color: '#aaa', fontSize: 12, lineHeight: 1.7, margin: '6px 0 0 16px' }}>• {item}</p>
+            })}
+          </div>
+        )
+      })
+    }
+
+    var text = Object.values(content).filter(function (v) { return typeof v === 'string' }).join('\n\n')
+    if (text) return <p style={{ color: '#ccc', fontSize: 13, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{text}</p>
+
+    return <pre style={{ color: '#ccc', fontSize: 11, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(content, null, 2)}</pre>
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={function (e) { e.stopPropagation() }} style={{ width: '100%', maxWidth: 560, maxHeight: '80vh', background: '#0a0a0a', border: '1px solid #222', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #1a1a1a', flexShrink: 0 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#fff', fontFamily: FONT }}>{titles[type] || type}</span>
+          <button onClick={onClose} style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, padding: '4px 12px', color: '#888', fontSize: 12, fontFamily: FONT, cursor: 'pointer' }}>Close</button>
+        </div>
+        <div style={{ padding: 20, overflowY: 'auto', flex: 1, fontFamily: FONT }}>{renderContent()}</div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #1a1a1a', flexShrink: 0, textAlign: 'center' }}>
+          <p style={{ fontSize: 11, color: '#555', margin: 0, fontFamily: FONT }}>GraceFinance · Grace Holdings LLC</p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function SignupPage() {
   var navigate = useNavigate(); var auth = useAuth(); var signup = auth.signup
@@ -27,8 +89,7 @@ export default function SignupPage() {
   var verifyPendingState = useState(false); var verifyPending = verifyPendingState[0]; var setVerifyPending = verifyPendingState[1]
   var resendLoadingState = useState(false); var resendLoading = resendLoadingState[0]; var setResendLoading = resendLoadingState[1]
   var resendSentState = useState(false); var resendSent = resendSentState[0]; var setResendSent = resendSentState[1]
-
-  var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
+  var legalModalState = useState(null); var legalModal = legalModalState[0]; var setLegalModal = legalModalState[1]
 
   function validateEmail(em) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) }
 
@@ -54,10 +115,7 @@ export default function SignupPage() {
     if (!agreed) errs.agreed = 'You must agree to continue'
     setErrors(errs); if (Object.keys(errs).length > 0) return
     setLoading(true)
-    try {
-      await signup(name, email, password, dob)
-      setVerifyPending(true)
-    }
+    try { await signup(name, email, password, dob); setVerifyPending(true) }
     catch (err) { setApiError(err.message || 'Signup failed. Try again.') }
     finally { setLoading(false) }
   }
@@ -65,24 +123,15 @@ export default function SignupPage() {
   async function handleResend() {
     setResendLoading(true)
     try {
-      await fetch(API_BASE + '/auth/resend-verification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email }),
-      })
+      await fetch(API_BASE + '/auth/resend-verification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) })
       setResendSent(true)
     } catch (e) { }
     finally { setResendLoading(false) }
   }
 
-  var inputStyle = function (field) {
-    return { width: '100%', padding: '14px 0', fontSize: 15, fontFamily: FONT, fontWeight: 400, color: '#ffffff', background: 'transparent', border: 'none', borderBottom: '1px solid ' + (errors[field] ? '#ff4444' : focused === field ? '#ffffff' : '#4b5563'), outline: 'none', transition: 'border-color 0.3s ease', letterSpacing: '0.01em' }
-  }
-  var labelStyle = function (field) {
-    return { display: 'block', fontSize: 11, fontWeight: 500, color: errors[field] ? '#ff4444' : '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, fontFamily: FONT }
-  }
+  var inputStyle = function (field) { return { width: '100%', padding: '14px 0', fontSize: 15, fontFamily: FONT, fontWeight: 400, color: '#ffffff', background: 'transparent', border: 'none', borderBottom: '1px solid ' + (errors[field] ? '#ff4444' : focused === field ? '#ffffff' : '#4b5563'), outline: 'none', transition: 'border-color 0.3s ease', letterSpacing: '0.01em' } }
+  var labelStyle = function (field) { return { display: 'block', fontSize: 11, fontWeight: 500, color: errors[field] ? '#ff4444' : '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, fontFamily: FONT } }
 
-  // ── Post-signup verify screen ─────────────────────────────────────────────
   if (verifyPending) {
     return (
       <div style={{ minHeight: '100vh', background: '#000000', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
@@ -95,12 +144,7 @@ export default function SignupPage() {
           <p style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7, margin: '0 0 32px' }}>Click the link to activate your account. Check spam if you don't see it within a minute.</p>
           <div style={{ padding: '18px 20px', background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 10, marginBottom: 32 }}>
             <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 12px' }}>Didn't get it?</p>
-            {resendSent
-              ? <p style={{ fontSize: 13, color: '#10b981', margin: 0, fontWeight: 600 }}>✓ New link sent</p>
-              : <button onClick={handleResend} disabled={resendLoading} style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, padding: '8px 18px', color: '#ffffff', fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: resendLoading ? 'wait' : 'pointer', opacity: resendLoading ? 0.5 : 1 }}>
-                {resendLoading ? 'Sending...' : 'Resend verification email'}
-              </button>
-            }
+            {resendSent ? <p style={{ fontSize: 13, color: '#10b981', margin: 0, fontWeight: 600 }}>✓ New link sent</p> : <button onClick={handleResend} disabled={resendLoading} style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, padding: '8px 18px', color: '#ffffff', fontSize: 13, fontWeight: 500, fontFamily: FONT, cursor: resendLoading ? 'wait' : 'pointer', opacity: resendLoading ? 0.5 : 1 }}>{resendLoading ? 'Sending...' : 'Resend verification email'}</button>}
           </div>
           <Link to="/login" style={{ fontSize: 13, color: '#6b7280', textDecoration: 'none' }}>Back to sign in</Link>
         </div>
@@ -136,25 +180,17 @@ export default function SignupPage() {
               style={{ width: 16, height: 16, marginTop: 2, accentColor: '#ffffff', cursor: 'pointer', flexShrink: 0 }} />
             <span style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5, fontFamily: FONT }}>
               I agree to the{' '}
-              <a href="/legal/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Terms of Service</a>
+              <span onClick={function (e) { e.preventDefault(); e.stopPropagation(); setLegalModal('terms') }} style={{ color: '#ffffff', textDecoration: 'underline', cursor: 'pointer' }}>Terms of Service</span>
               {' '}and{' '}
-              <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</a>
+              <span onClick={function (e) { e.preventDefault(); e.stopPropagation(); setLegalModal('privacy') }} style={{ color: '#ffffff', textDecoration: 'underline', cursor: 'pointer' }}>Privacy Policy</span>
             </span>
           </label>
           {errors.agreed && (<div style={{ fontSize: 11, color: '#ff4444', marginTop: 6, marginLeft: 26, fontFamily: FONT }}>{errors.agreed}</div>)}
         </div>
-        <button type="submit" disabled={loading}
-          style={{ width: '100%', padding: '14px', fontSize: 14, fontWeight: 600, fontFamily: FONT, color: '#000000', background: '#ffffff', border: 'none', borderRadius: 8, cursor: loading ? 'wait' : 'pointer', letterSpacing: '-0.01em', transition: 'opacity 0.2s ease', opacity: loading ? 0.6 : 1 }}
-          onMouseEnter={function (e) { if (!loading) e.target.style.opacity = '0.85' }}
-          onMouseLeave={function (e) { if (!loading) e.target.style.opacity = '1' }}
-        >{loading ? 'Creating account...' : 'Get Started'}</button>
+        <button type="submit" disabled={loading} style={{ width: '100%', padding: '14px', fontSize: 14, fontWeight: 600, fontFamily: FONT, color: '#000000', background: '#ffffff', border: 'none', borderRadius: 8, cursor: loading ? 'wait' : 'pointer', letterSpacing: '-0.01em', transition: 'opacity 0.2s ease', opacity: loading ? 0.6 : 1 }} onMouseEnter={function (e) { if (!loading) e.target.style.opacity = '0.85' }} onMouseLeave={function (e) { if (!loading) e.target.style.opacity = '1' }}>{loading ? 'Creating account...' : 'Get Started'}</button>
       </form>
-      <p style={{ textAlign: 'center', marginTop: 28, fontSize: 13, color: '#6b7280' }}>
-        Already tracking?{' '}<Link to="/login" style={{ color: '#ffffff', fontWeight: 500, textDecoration: 'none' }}>Sign in</Link>
-      </p>
-      <p style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: '#4b5563' }}>
-        <Link to="/pricing" style={{ color: '#6b7280', textDecoration: 'none' }}>See our plans →</Link>
-      </p>
+      <p style={{ textAlign: 'center', marginTop: 28, fontSize: 13, color: '#6b7280' }}>Already tracking?{' '}<Link to="/login" style={{ color: '#ffffff', fontWeight: 500, textDecoration: 'none' }}>Sign in</Link></p>
+      <p style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: '#4b5563' }}><Link to="/pricing" style={{ color: '#6b7280', textDecoration: 'none' }}>See our plans →</Link></p>
     </>
   )
 
@@ -174,14 +210,10 @@ export default function SignupPage() {
           <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 20px' }}>Know your Financial Confidence Score in minutes.</p>
           {formJSX}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 36, paddingTop: 20, borderTop: '1px solid #1a1a1a' }}>
-            {[{ num: '5', label: 'Dimensions' }, { num: '< 2min', label: 'Check-in' }, { num: '24/7', label: 'AI Coach' }].map(function (stat) {
-              return (<div key={stat.label} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 600, color: '#ffffff' }}>{stat.num}</div>
-                <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{stat.label}</div>
-              </div>)
-            })}
+            {[{ num: '5', label: 'Dimensions' }, { num: '< 2min', label: 'Check-in' }, { num: '24/7', label: 'AI Coach' }].map(function (stat) { return (<div key={stat.label} style={{ textAlign: 'center' }}><div style={{ fontSize: 18, fontWeight: 600, color: '#ffffff' }}>{stat.num}</div><div style={{ fontSize: 10, color: '#6b7280', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{stat.label}</div></div>) })}
           </div>
         </div>
+        {legalModal && <LegalModal type={legalModal} onClose={function () { setLegalModal(null) }} />}
       </div>
     )
   }
@@ -201,9 +233,7 @@ export default function SignupPage() {
         </div>
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', gap: 32, marginBottom: 32 }}>
-            {[{ num: '5', label: 'Behavioral dimensions' }, { num: '< 2min', label: 'Daily check-in' }, { num: '24/7', label: 'AI coaching' }].map(function (stat) {
-              return (<div key={stat.label}><div style={{ fontSize: 20, fontWeight: 600, color: '#ffffff', letterSpacing: '-0.02em' }}>{stat.num}</div><div style={{ fontSize: 11, color: '#6b7280', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{stat.label}</div></div>)
-            })}
+            {[{ num: '5', label: 'Behavioral dimensions' }, { num: '< 2min', label: 'Daily check-in' }, { num: '24/7', label: 'AI coaching' }].map(function (stat) { return (<div key={stat.label}><div style={{ fontSize: 20, fontWeight: 600, color: '#ffffff', letterSpacing: '-0.02em' }}>{stat.num}</div><div style={{ fontSize: 11, color: '#6b7280', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{stat.label}</div></div>) })}
           </div>
           <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 20 }}><p style={{ fontSize: 12, color: '#6b7280', margin: 0, letterSpacing: '0.02em' }}>Where Financial Confidence Is Measured</p></div>
         </div>
@@ -217,6 +247,7 @@ export default function SignupPage() {
           {formJSX}
         </div>
       </div>
+      {legalModal && <LegalModal type={legalModal} onClose={function () { setLegalModal(null) }} />}
     </div>
   )
 }

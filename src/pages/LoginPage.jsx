@@ -1,6 +1,6 @@
 /**
- * LoginPage — v6.2
- * ADDED: "See our plans" link to pricing page
+ * LoginPage — v6.3
+ * Clean build with pricing link
  */
 
 import { useState } from 'react'

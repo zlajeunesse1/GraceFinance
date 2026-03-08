@@ -30,6 +30,8 @@ from app.routers.export import router as export_router
 from app.routers import me_router
 from app.services.daily_emails import send_daily_engagement_emails
 from app.services.gfci_engine import compute_daily_gfci
+from app.services.weekly_report import send_weekly_reports
+from app.routers.bsi_router import router as bsi_router
 
 settings = get_settings()
 
@@ -92,6 +94,19 @@ scheduler.add_job(
     replace_existing=True,
 )
 
+# Weekly personalized reports — Sunday 6:00 PM EST (23:00 UTC)
+# Sends index digest + personalized FCS/BSI breakdown to all users.
+# Premium users get a Grace AI weekly insight.
+scheduler.add_job(
+    send_weekly_reports,
+    "cron",
+    day_of_week="sun",
+    hour=23,
+    minute=0,
+    id="weekly_reports",
+    replace_existing=True,
+)
+
 scheduler.start()
 
 # ── CORS — explicit origins only, no wildcards ──
@@ -138,6 +153,9 @@ app.include_router(billing_router)
 app.include_router(checkins_router)
 app.include_router(index_router)
 
+# ── Behavioral Shift Indicator ──
+app.include_router(bsi_router)
+
 # ── Grace AI Coach ──
 app.include_router(grace_router)
 
@@ -167,6 +185,7 @@ def root():
         "data_engine": {
             "checkin": "/checkin/questions",
             "index": "/index/latest",
+            "bsi": "/bsi/questions",
         },
         "coach": {
             "chat": "/grace/chat",

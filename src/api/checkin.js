@@ -115,4 +115,35 @@ export const checkinApi = {
   async computeIndex() {
     return apiFetch('/index/compute', { method: 'POST' });
   },
+
+  // ── BSI: Behavioral Shift Indicator ──
+
+  // Get this week's BSI questions (available Fri-Sun)
+  async getBSIQuestions() {
+    return apiFetch('/bsi/questions');
+  },
+
+  // Submit BSI answers (one per week)
+  // answers: [{ question_id: "BX-1", raw_value: 4 }, ...]
+  async submitBSI(answers) {
+    return apiFetch('/bsi/submit', {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    });
+  },
+
+  // Get latest BSI score + pattern breakdown
+  async getLatestBSI() {
+    return apiFetch('/bsi/latest');
+  },
+
+  // Get BSI history for trending
+  async getBSIHistory(weeks = 12) {
+    return apiFetch(`/bsi/history?weeks=${weeks}`);
+  },
+
+  // Population-level BSI (Premium only)
+  async getPopulationBSI() {
+    return apiFetch('/bsi/population');
+  },
 };
