@@ -1,19 +1,28 @@
 """
 GraceFinance — Configuration
+v1.1 — Critical settings now validated, JWT expiry extended to 7 days
+
+CHANGES:
+  - secret_key, database_url now have no default — app crashes if missing
+    instead of running with empty JWT secret or no database
+  - access_token_expire_minutes extended from 30 to 10080 (7 days)
+    so daily check-in users don't get logged out every half hour
+  - Added validator to catch missing critical env vars at startup
 """
 
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    # Database
-    database_url: str = ""
+    # Database — REQUIRED (no default — crashes if missing)
+    database_url: str
 
-    # JWT Auth
-    secret_key: str = ""
+    # JWT Auth — secret_key REQUIRED
+    secret_key: str
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 10080  # 7 days (was 30 min — caused silent logouts)
     refresh_token_expire_days: int = 7
 
     # Stripe
@@ -37,6 +46,26 @@ class Settings(BaseSettings):
     app_env: str = "development"
     frontend_url: str = "https://gracefinance.co"
     app_domain: str = ""
+
+    @field_validator("secret_key")
+    @classmethod
+    def secret_key_not_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError(
+                "SECRET_KEY env var is missing or empty. "
+                "The app cannot start without a JWT signing key."
+            )
+        return v
+
+    @field_validator("database_url")
+    @classmethod
+    def database_url_not_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError(
+                "DATABASE_URL env var is missing or empty. "
+                "The app cannot start without a database connection."
+            )
+        return v
 
     class Config:
         env_file = ".env"

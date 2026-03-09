@@ -1,6 +1,6 @@
 """
 Feed Router — Social Feed API Endpoints
-NEW FILE: app/routers/feed.py
+v1.1 — SECURITY FIX: /generate-community-insight now requires admin auth
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,9 +9,12 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.database import get_db
+from app.models import User
 from app.services.auth import get_current_user
 
 router = APIRouter(prefix="/feed", tags=["feed"])
+
+ADMIN_EMAILS = {"zaclajeunesse1@gmail.com"}
 
 
 class FeedSettingsUpdate(BaseModel):
@@ -47,7 +50,7 @@ def react_to_post(post_id: int, body: ReactionRequest, db: Session = Depends(get
 
 
 @router.get("/settings")
-def get_settings(db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_feed_settings_endpoint(db: Session = Depends(get_db), user=Depends(get_current_user)):
     from app.services.feed_service import get_feed_settings
     s = get_feed_settings(db, user.id)
     return {"sharing_enabled": s.sharing_enabled, "share_streaks": s.share_streaks, "share_tier_changes": s.share_tier_changes, "share_dimension_progress": s.share_dimension_progress, "share_goals": s.share_goals, "share_xp_milestones": s.share_xp_milestones, "show_tier_on_profile": s.show_tier_on_profile, "show_scores_on_profile": s.show_scores_on_profile, "display_name": s.display_name}
@@ -62,7 +65,14 @@ def update_settings(body: FeedSettingsUpdate, db: Session = Depends(get_db), use
 
 
 @router.post("/generate-community-insight")
-def generate_insight(db: Session = Depends(get_db)):
+def generate_insight(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """ADMIN ONLY — generate a community insight post."""
+    if user.email not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
     from app.services.feed_service import generate_community_insight
     post = generate_community_insight(db)
     if post:

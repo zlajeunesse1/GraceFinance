@@ -1,5 +1,7 @@
 """
 GraceFinance — Email Service
+v1.1 — HTML-escapes user-provided content in email templates
+
 Sends transactional emails via Google SMTP (support@gracefinance.co).
 
 Requires Railway env vars:
@@ -12,6 +14,7 @@ Requires Railway env vars:
 
 import smtplib
 import logging
+from html import escape as html_escape
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.config import get_settings
@@ -47,6 +50,9 @@ def send_verification_email(to: str, first_name: str, token: str) -> bool:
     verify_url = f"{settings.frontend_url}/verify-email?token={token}"
     subject = "Verify your GraceFinance account"
 
+    # HTML-escape user-provided name to prevent injection
+    safe_name = html_escape(first_name)
+
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -57,7 +63,7 @@ def send_verification_email(to: str, first_name: str, token: str) -> bool:
     </div>
     <h1 style="color:#fff;font-size:22px;font-weight:600;margin:0 0 8px;letter-spacing:-0.5px;">Verify your email</h1>
     <p style="color:#6b7280;font-size:14px;margin:0 0 28px;line-height:1.6;">
-      Hey {first_name}, welcome to GraceFinance. Click below to verify your email and activate your account.
+      Hey {safe_name}, welcome to GraceFinance. Click below to verify your email and activate your account.
     </p>
     <a href="{verify_url}" style="display:inline-block;padding:13px 28px;background:#fff;color:#000;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;letter-spacing:-0.2px;">
       Verify Email
@@ -82,6 +88,9 @@ def send_password_reset_email(to: str, first_name: str, token: str) -> bool:
     reset_url = f"{settings.frontend_url}/reset-password?token={token}"
     subject = "Reset your GraceFinance password"
 
+    # HTML-escape user-provided name
+    safe_name = html_escape(first_name)
+
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -92,7 +101,7 @@ def send_password_reset_email(to: str, first_name: str, token: str) -> bool:
     </div>
     <h1 style="color:#fff;font-size:22px;font-weight:600;margin:0 0 8px;letter-spacing:-0.5px;">Reset your password</h1>
     <p style="color:#6b7280;font-size:14px;margin:0 0 28px;line-height:1.6;">
-      Hey {first_name}, we received a request to reset your password. Click below to set a new one.
+      Hey {safe_name}, we received a request to reset your password. Click below to set a new one.
     </p>
     <a href="{reset_url}" style="display:inline-block;padding:13px 28px;background:#fff;color:#000;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;letter-spacing:-0.2px;">
       Reset Password
