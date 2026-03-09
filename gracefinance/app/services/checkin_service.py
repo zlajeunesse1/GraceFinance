@@ -1,44 +1,43 @@
 """
-CheckIn Service — v5.1 (Full Audit Implementation)
+CheckIn Service — v5.2 (Adaptive Dampening Fix)
 ══════════════════════════════════════════════════════════════════
-ADDITIONS FROM v5.0:
+CHANGES FROM v5.1:
 
-  CROSS-DIMENSIONAL COHERENCE (Audit Item #1):
-    Computes standard deviation across the 5 pillar scores.
-    High std dev = internally contradictory (e.g., high stability
-    but zero emergency readiness). Stored as fcs_coherence (0-100).
-    100 = perfectly coherent. Low values = potential dishonesty signal.
+  ADAPTIVE PILLAR MOVEMENT CAP:
+    Early users (< 10 snapshots) get a wider movement cap so their
+    score can actually respond to check-ins. Tightens over time as
+    the score becomes more established and meaningful.
 
-  SUSTAINED DETERIORATION FLAG (Audit Item #2):
-    If fcs_raw < fcs_composite for 5+ consecutive snapshots,
-    sustained_deterioration = True. Means the EMA is masking
-    a real downward trend. Grace AI can surface this.
+      Snapshots 1-3:   cap = 0.15 (pillar can move 15% per check-in)
+      Snapshots 4-9:   cap = 0.08
+      Snapshots 10-19: cap = 0.04
+      Snapshots 20+:   cap = 0.02 (original value — fully stabilized)
 
-  RAW-COMPOSITE GAP TRACKING (Audit Item #3):
-    Stores raw_composite_gap = fcs_raw - fcs_composite.
-    Positive = raw is above smoothed (improving faster than shown).
-    Negative = raw is below smoothed (declining, masked by EMA).
-    Widening gap = real trend being hidden by smoothing.
+  ADAPTIVE EMA ALPHA:
+    New users need their score to be responsive. The EMA alpha starts
+    high and tapers as data accumulates:
 
-  POPULATION RECALIBRATION READY (Audit Item #4):
-    _compute_population_adjustment() is stubbed and returns 0.0
-    until MIN_USERS_FOR_RECALIBRATION (100) is reached. Once
-    active, applies a z-score offset to center the population mean
-    toward 50. Activates automatically at scale.
+      Snapshots 1-3:   alpha = 0.60 (score mostly follows raw)
+      Snapshots 4-9:   alpha = 0.35
+      Snapshots 10-19: alpha = 0.20
+      Snapshots 20+:   alpha = 0.15 (original value — fully smoothed)
 
-  RESPONSE ENTROPY MONITORING (Audit Item #5):
-    Computes Shannon entropy of each user's responses per dimension
-    over the last 30 days. Low entropy = same answer every day =
-    potential gaming or disengagement. Stored as fcs_entropy (0-100).
+  ADAPTIVE FCS MOVEMENT CAP:
+    Same idea — allow bigger jumps early, tighten with maturity:
 
-  TEMPORAL QUESTION WEIGHTING (Audit Item #8):
-    Questions tagged with temporal_scope ("week" or "month") are
-    weighted differently in each window:
-      "week" questions: 30d window weight boosted by 1.5x
-      "month" questions: 60d window weight boosted by 1.3x
-    This aligns the question's reference frame with the scoring window.
+      Snapshots 1-3:   cap = 10.0
+      Snapshots 4-9:   cap = 6.0
+      Snapshots 10-19: cap = 4.0
+      Snapshots 20+:   cap = 3.0 (original value)
 
-INTERFACE: Same as v5 — drop-in replacement.
+  CHECKIN_COUNT FIX:
+    The snapshot's checkin_count now stores the number of distinct
+    check-in DAYS (not response rows), consistent with the router fix.
+
+All v5.1 audit features (coherence, deterioration, entropy, population
+recalibration, temporal weighting) are preserved unchanged.
+
+INTERFACE: Same as v5.1 — drop-in replacement.
 """
 
 from datetime import datetime, timezone, timedelta, date
@@ -68,7 +67,30 @@ FORMULA_TREND_WEIGHT: float = 0.10
 
 assert abs(FORMULA_BEHAVIOR_WEIGHT + FORMULA_CONSISTENCY_WEIGHT + FORMULA_TREND_WEIGHT - 1.0) < 1e-9
 
-EMA_ALPHA: float = 0.15
+# ── Adaptive EMA Alpha (by snapshot count) ──
+# New users need responsiveness; mature users need stability.
+EMA_ALPHA_TIERS = [
+    (3,  0.60),   # snapshots 1-3:  score mostly follows raw
+    (9,  0.35),   # snapshots 4-9:  transitional
+    (19, 0.20),   # snapshots 10-19: moderate smoothing
+]
+EMA_ALPHA_DEFAULT: float = 0.15  # 20+ snapshots: original fully-smoothed value
+
+# ── Adaptive Pillar Movement Cap (by snapshot count) ──
+PILLAR_CAP_TIERS = [
+    (3,  0.15),   # snapshots 1-3:  generous — let pillars find their level
+    (9,  0.08),   # snapshots 4-9:  tightening
+    (19, 0.04),   # snapshots 10-19: approaching steady state
+]
+PILLAR_CAP_DEFAULT: float = 0.02  # 20+ snapshots: original tight cap
+
+# ── Adaptive FCS Movement Cap (by snapshot count) ──
+FCS_CAP_TIERS = [
+    (3,  10.0),   # snapshots 1-3:  allow meaningful initial movement
+    (9,   6.0),   # snapshots 4-9:  tightening
+    (19,  4.0),   # snapshots 10-19
+]
+FCS_CAP_DEFAULT: float = 3.0  # 20+ snapshots: original cap
 
 WINDOW_WEIGHTS: Dict[int, float] = {
     30: 0.20,
@@ -77,11 +99,8 @@ WINDOW_WEIGHTS: Dict[int, float] = {
 }
 
 # Temporal weighting boosts
-TEMPORAL_BOOST_WEEK_30D: float = 1.5    # "week" questions get 1.5x weight in 30d window
-TEMPORAL_BOOST_MONTH_60D: float = 1.3   # "month" questions get 1.3x weight in 60d window
-
-MAX_FCS_MOVEMENT: float = 3.0
-MAX_PILLAR_MOVEMENT: float = 0.02
+TEMPORAL_BOOST_WEEK_30D: float = 1.5
+TEMPORAL_BOOST_MONTH_60D: float = 1.3
 
 MIN_CHECKINS_FOR_CONFIDENT: int = 5
 MIN_PILLARS_FOR_SCORE: int = 3
@@ -96,11 +115,36 @@ OUTLIER_DAMPEN_FACTOR: float = 0.5
 
 BSI_SHOCK_THRESHOLD: float = 20.0
 
-# Sustained deterioration: raw < composite for N consecutive snapshots
 DETERIORATION_CONSECUTIVE_THRESHOLD: int = 5
-
-# Population recalibration: only activate at this user count
 MIN_USERS_FOR_RECALIBRATION: int = 100
+
+
+# ══════════════════════════════════════════
+#  ADAPTIVE TIER HELPER
+# ══════════════════════════════════════════
+
+def _get_tiered_value(snapshot_count: int, tiers: list, default: float) -> float:
+    """
+    Given a snapshot count, return the appropriate value from the tier list.
+    Tiers are (max_count, value) pairs checked in order.
+    Falls through to default if snapshot_count exceeds all tier thresholds.
+    """
+    for max_count, value in tiers:
+        if snapshot_count <= max_count:
+            return value
+    return default
+
+
+def _count_user_snapshots(db: Session, user_id) -> int:
+    """Count total existing snapshots for adaptive parameter selection."""
+    return (
+        db.query(func.count(UserMetricSnapshot.id))
+        .filter(
+            UserMetricSnapshot.user_id == user_id,
+            UserMetricSnapshot.fcs_composite.isnot(None),
+        )
+        .scalar() or 0
+    )
 
 
 # ══════════════════════════════════════════
@@ -189,7 +233,6 @@ def _compute_dimension_averages_temporal(
     for r in responses:
         dim = r.dimension
         if dim in dim_weighted and r.normalized_value is not None:
-            # Determine temporal weight
             scope = QUESTION_TEMPORAL_SCOPE.get(r.question_id, "general")
             weight = 1.0
 
@@ -252,24 +295,26 @@ def _dampen_outliers(responses):
 
 
 # ══════════════════════════════════════════
-#  MOVEMENT CAPPING
+#  MOVEMENT CAPPING (now adaptive)
 # ══════════════════════════════════════════
 
-def _cap_pillar_movement(new_val, old_val):
+def _cap_pillar_movement(new_val, old_val, max_movement: float):
+    """Cap pillar movement with an adaptive max_movement parameter."""
     if new_val is None or old_val is None:
         return new_val
     delta = new_val - old_val
-    if abs(delta) > MAX_PILLAR_MOVEMENT:
-        return round(old_val + (MAX_PILLAR_MOVEMENT if delta > 0 else -MAX_PILLAR_MOVEMENT), 4)
+    if abs(delta) > max_movement:
+        return round(old_val + (max_movement if delta > 0 else -max_movement), 4)
     return new_val
 
 
-def _cap_fcs_movement(new_fcs, old_fcs):
+def _cap_fcs_movement(new_fcs, old_fcs, max_movement: float):
+    """Cap FCS movement with an adaptive max_movement parameter."""
     if new_fcs is None or old_fcs is None:
         return new_fcs
     delta = new_fcs - old_fcs
-    if abs(delta) > MAX_FCS_MOVEMENT:
-        return round(old_fcs + (MAX_FCS_MOVEMENT if delta > 0 else -MAX_FCS_MOVEMENT), 2)
+    if abs(delta) > max_movement:
+        return round(old_fcs + (max_movement if delta > 0 else -max_movement), 2)
     return new_fcs
 
 
@@ -278,25 +323,14 @@ def _cap_fcs_movement(new_fcs, old_fcs):
 # ══════════════════════════════════════════
 
 def _compute_coherence(blended: Dict[str, Optional[float]]) -> float:
-    """
-    Measures how internally consistent the user's pillar scores are.
-    Low std dev across pillars = coherent (100).
-    High std dev = contradictory signals (lower score).
-
-    Scale: 0-100 where 100 = perfectly coherent.
-    A user claiming 100% stability but 0% emergency readiness
-    would score low here.
-    """
     values = [v for v in blended.values() if v is not None]
     if len(values) < 2:
-        return 100.0  # not enough data to judge
+        return 100.0
 
     mean = sum(values) / len(values)
     variance = sum((v - mean) ** 2 for v in values) / len(values)
     std_dev = math.sqrt(variance)
 
-    # Max possible std_dev on 0-1 scale with 5 values is ~0.45
-    # Map: 0 std_dev = 100 coherence, 0.45 std_dev = 0 coherence
     coherence = max(0.0, 100.0 * (1.0 - (std_dev / 0.45)))
     return round(coherence, 1)
 
@@ -306,11 +340,6 @@ def _compute_coherence(blended: Dict[str, Optional[float]]) -> float:
 # ══════════════════════════════════════════
 
 def _check_sustained_deterioration(db, user_id) -> bool:
-    """
-    Returns True if fcs_raw has been below fcs_composite for
-    DETERIORATION_CONSECUTIVE_THRESHOLD consecutive snapshots.
-    This means the EMA smoothing is masking a real downward trend.
-    """
     recent = (
         db.query(UserMetricSnapshot)
         .filter(
@@ -337,13 +366,6 @@ def _check_sustained_deterioration(db, user_id) -> bool:
 # ══════════════════════════════════════════
 
 def _compute_response_entropy(db, user_id, now) -> float:
-    """
-    Shannon entropy of response patterns over last 30 days.
-    High entropy = varied responses = likely honest.
-    Low entropy = same answers every day = potential gaming.
-
-    Scale: 0-100 where 100 = maximum variety, 0 = identical responses.
-    """
     cutoff = now - timedelta(days=30)
 
     responses = (
@@ -359,9 +381,8 @@ def _compute_response_entropy(db, user_id, now) -> float:
     )
 
     if len(responses) < 5:
-        return 50.0  # not enough data, return neutral
+        return 50.0
 
-    # Group by dimension, compute entropy per dimension
     dim_responses: Dict[str, List[int]] = {}
     for r in responses:
         if r.dimension not in dim_responses:
@@ -374,7 +395,6 @@ def _compute_response_entropy(db, user_id, now) -> float:
         if len(values) < 3:
             continue
 
-        # Count frequency of each unique value
         counts: Dict[int, int] = {}
         for v in values:
             counts[v] = counts.get(v, 0) + 1
@@ -386,8 +406,6 @@ def _compute_response_entropy(db, user_id, now) -> float:
             if p > 0:
                 entropy -= p * math.log2(p)
 
-        # Normalize: max entropy for a 1-5 scale = log2(5) ≈ 2.32
-        # For 1-10 scale = log2(10) ≈ 3.32
         scale_max = max(values) if values else 5
         max_entropy = math.log2(min(scale_max, len(set(values)))) if len(set(values)) > 1 else 1.0
         normalized = (entropy / max_entropy) * 100 if max_entropy > 0 else 50.0
@@ -476,18 +494,8 @@ def _compute_user_slopes(db, user_id, now):
 # ══════════════════════════════════════════
 
 def _compute_population_adjustment(db) -> float:
-    """
-    Returns a z-score offset to re-center the population mean toward 50.
-    Only activates when MIN_USERS_FOR_RECALIBRATION active users exist.
-    Returns 0.0 until then (no effect).
-
-    When active:
-      offset = 50 - population_mean
-      Applied as: fcs_raw += offset * 0.1 (gentle, max 2 pts adjustment)
-    """
     cutoff = datetime.now(timezone.utc) - timedelta(days=14)
 
-    # Count active users with recent scores
     active_count = (
         db.query(func.count(func.distinct(UserMetricSnapshot.user_id)))
         .filter(
@@ -500,7 +508,6 @@ def _compute_population_adjustment(db) -> float:
     if active_count < MIN_USERS_FOR_RECALIBRATION:
         return 0.0
 
-    # Get population mean from latest snapshots
     from sqlalchemy import desc
 
     latest_sub = (
@@ -535,46 +542,65 @@ def _compute_population_adjustment(db) -> float:
     population_mean = sum(scores) / len(scores)
     offset = 50.0 - population_mean
 
-    # Gentle adjustment: max 2 points, applied at 10% strength
     capped_offset = max(-20.0, min(20.0, offset))
     return round(capped_offset * 0.1, 2)
 
 
 # ══════════════════════════════════════════
-#  SNAPSHOT COMPUTATION — v5.1 FULL AUDIT ENGINE
+#  DISTINCT CHECK-IN DAY COUNT
+# ══════════════════════════════════════════
+
+def _count_distinct_checkin_days(db: Session, user_id, since: datetime) -> int:
+    """
+    Count distinct calendar days (UTC) with at least one check-in response.
+    Used instead of raw row count to get the actual number of check-in sessions.
+    """
+    distinct_days = (
+        db.query(
+            func.count(
+                func.distinct(func.date(CheckInResponse.checkin_date))
+            )
+        )
+        .filter(
+            and_(
+                CheckInResponse.user_id == user_id,
+                CheckInResponse.checkin_date >= since,
+            )
+        )
+        .scalar() or 0
+    )
+    return distinct_days
+
+
+# ══════════════════════════════════════════
+#  SNAPSHOT COMPUTATION — v5.2 ADAPTIVE ENGINE
 # ══════════════════════════════════════════
 
 def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
     """
-    v5.1 FCS computation pipeline (full audit implementation):
+    v5.2 FCS computation pipeline (adaptive dampening):
 
-    Step 1  — Gather responses across 30/60/90-day windows
-    Step 2  — Dampen outliers per dimension
-    Step 3  — Compute per-dimension averages with temporal weighting
-    Step 4  — Blend windows (30d*0.20 + 60d*0.35 + 90d*0.45)
-    Step 5  — Cap pillar movement vs previous snapshot
-    Step 6a — Compute Behavior Score (0-100)
-    Step 6b — Compute Consistency Score (0-100)
-    Step 6c — Compute Trend Score (0-100)
-    Step 6d — Compute raw FCS: Behavior*0.60 + Consistency*0.30 + Trend*0.10
-    Step 6e — Apply population recalibration (when at scale)
-    Step 7  — Apply EMA smoothing (alpha=0.15)
-    Step 8  — Cap FCS movement (+/-3 points max)
-    Step 9  — Compute confidence metadata
-    Step 10 — Compute BSI from weekly behavioral questions
-    Step 11 — Update streak
-    Step 12 — Compute per-user slopes (7d, 30d)
-    Step 13 — Compute coherence score
-    Step 14 — Check sustained deterioration
-    Step 15 — Compute response entropy
-    Step 16 — Compute raw-composite gap
-    Step 17 — Persist and return snapshot
+    Same 17-step pipeline as v5.1, but Steps 5/7/8 now use adaptive
+    parameters that scale with the user's snapshot count:
+
+      Early users  → responsive (wide caps, high alpha)
+      Mature users → stable (tight caps, low alpha)
+
+    This fixes the "flatline at first score" bug where triple-dampening
+    (pillar cap + EMA + FCS cap) made it mathematically impossible for
+    scores to move meaningfully in the first ~10 check-ins.
     """
     now = datetime.now(timezone.utc)
 
     _update_streak(db, user_id, now)
 
     previous_snapshot = _get_latest_snapshot(db, user_id)
+
+    # ── Determine adaptive parameters based on history ──
+    snapshot_count = _count_user_snapshots(db, user_id)
+    adaptive_pillar_cap = _get_tiered_value(snapshot_count, PILLAR_CAP_TIERS, PILLAR_CAP_DEFAULT)
+    adaptive_ema_alpha = _get_tiered_value(snapshot_count, EMA_ALPHA_TIERS, EMA_ALPHA_DEFAULT)
+    adaptive_fcs_cap = _get_tiered_value(snapshot_count, FCS_CAP_TIERS, FCS_CAP_DEFAULT)
 
     # Step 1
     windowed = _gather_windowed_responses(db, user_id, now)
@@ -621,7 +647,7 @@ def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
                 total_weight += weight
         blended[dim] = round(weighted_sum / total_weight, 4) if total_weight > 0 else None
 
-    # Step 5
+    # Step 5 — Cap pillar movement (ADAPTIVE)
     if previous_snapshot:
         prev_dims = {
             "current_stability": previous_snapshot.current_stability,
@@ -631,7 +657,9 @@ def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
             "financial_agency": previous_snapshot.financial_agency,
         }
         for dim in FCS_WEIGHTS:
-            blended[dim] = _cap_pillar_movement(blended[dim], prev_dims.get(dim))
+            blended[dim] = _cap_pillar_movement(
+                blended[dim], prev_dims.get(dim), adaptive_pillar_cap
+            )
 
     # Step 6a — Behavior Score
     answered_weight = sum(w for dim, w in FCS_WEIGHTS.items() if blended.get(dim) is not None)
@@ -667,7 +695,7 @@ def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
         if pop_adj != 0.0:
             fcs_raw = round(max(0, min(100, fcs_raw + pop_adj)), 2)
 
-    # Step 7 — EMA smoothing
+    # Step 7 — EMA smoothing (ADAPTIVE ALPHA)
     fcs_composite = None
     bsi_shock = False
 
@@ -681,13 +709,17 @@ def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
             swing = abs(fcs_raw - prev_fcs)
             if swing >= BSI_SHOCK_THRESHOLD:
                 bsi_shock = True
-            fcs_composite = round((EMA_ALPHA * fcs_raw) + ((1 - EMA_ALPHA) * prev_fcs), 2)
+            fcs_composite = round(
+                (adaptive_ema_alpha * fcs_raw) + ((1 - adaptive_ema_alpha) * prev_fcs), 2
+            )
         else:
             fcs_composite = fcs_raw
 
-    # Step 8 — Cap FCS movement
+    # Step 8 — Cap FCS movement (ADAPTIVE)
     if previous_snapshot and previous_snapshot.fcs_composite is not None:
-        fcs_composite = _cap_fcs_movement(fcs_composite, previous_snapshot.fcs_composite)
+        fcs_composite = _cap_fcs_movement(
+            fcs_composite, previous_snapshot.fcs_composite, adaptive_fcs_cap
+        )
 
     # Step 9 — Confidence
     fcs_confidence = round(participation_ratio * pillar_coverage * 100, 1)
@@ -718,6 +750,11 @@ def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
         raw_composite_gap = round(fcs_raw - fcs_composite, 2)
 
     # Step 17 — Persist
+    #   checkin_count = distinct days, not response rows
+    distinct_days_90d = _count_distinct_checkin_days(
+        db, user_id, now - timedelta(days=90)
+    )
+
     snapshot = UserMetricSnapshot(
         user_id=user_id,
         computed_at=now,
@@ -740,7 +777,7 @@ def compute_user_snapshot(db: Session, user_id) -> UserMetricSnapshot:
         sustained_deterioration=sustained_deterioration,
         bsi_score=bsi_score,
         bsi_shock=bsi_shock,
-        checkin_count=len(all_responses),
+        checkin_count=distinct_days_90d,
     )
 
     db.add(snapshot)

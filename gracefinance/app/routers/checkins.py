@@ -4,17 +4,19 @@ Check-In Router — Frontend endpoints for the daily check-in flow.
 Endpoints:
   GET  /checkin/questions       → Get today's questions (empty if already checked in today)
   POST /checkin/submit          → Submit answers — enforces ONE check-in per user per day
+                                  AND max 7 check-ins per rolling 7-day window
   GET  /checkin/metrics         → User's FCS metric snapshots over time
   POST /checkin/reset           → Dev tool — clear today's check-in (ADMIN ONLY)
 
-Data quality rule:
-  One check-in per user per calendar day (Eastern Time). Enforced at the server
-  level on both endpoints. Resets at midnight ET (handles DST automatically).
+Data quality rules:
+  1. One check-in per user per calendar day (Eastern Time).
+  2. Max 7 check-ins per rolling 7-day window (from first check-in).
+  Enforced at the server level on both endpoints.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func, and_, text
+from sqlalchemy import desc, func, and_, text, cast, Date as SADate
 from datetime import datetime, timezone, timedelta, date
 from zoneinfo import ZoneInfo
 
@@ -44,8 +46,9 @@ router = APIRouter(prefix="/checkin", tags=["Check-In"])
 
 ADMIN_EMAILS = {"zaclajeunesse1@gmail.com"}
 
-# ── Timezone: all "today" logic anchored to Eastern Time ──────────────────────
+# ── Constants ─────────────────────────────────────────────────────────────────
 EASTERN = ZoneInfo("America/New_York")
+MAX_CHECKINS_PER_WEEK = 7
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
@@ -85,6 +88,47 @@ def _has_checked_in_today(db: Session, user_id) -> bool:
     return count > 0
 
 
+def _checkins_in_rolling_week(db: Session, user_id) -> int:
+    """
+    Count the number of DISTINCT calendar days (Eastern Time) the user
+    has checked in during the last 7 days.
+
+    This is the correct metric — NOT the number of individual response rows.
+    Each check-in session produces multiple rows (one per question),
+    so we count distinct dates to get actual check-in days.
+
+    Uses a rolling 7-day window anchored to the current ET date.
+    """
+    now_et = datetime.now(EASTERN)
+    # Rolling window: 7 days back from start of today
+    window_start_et = (now_et - timedelta(days=6)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    window_start_utc = window_start_et.astimezone(timezone.utc)
+
+    # Count distinct calendar dates (in ET) that have check-in responses
+    # We convert checkin_date to ET date and count distinct values
+    distinct_days = (
+        db.query(
+            func.count(
+                func.distinct(
+                    func.date(
+                        func.timezone("America/New_York", CheckInResponse.checkin_date)
+                    )
+                )
+            )
+        )
+        .filter(
+            and_(
+                CheckInResponse.user_id == user_id,
+                CheckInResponse.checkin_date >= window_start_utc,
+            )
+        )
+        .scalar() or 0
+    )
+    return distinct_days
+
+
 # ──────────────────────────────────────────
 #  GET TODAY'S QUESTIONS
 # ──────────────────────────────────────────
@@ -98,12 +142,23 @@ def get_questions(
     Serve today's check-in questions.
     Daily: 5 rotating FCS questions (one per dimension).
     Sundays: also includes 5 weekly BSI questions.
-    Returns empty lists + already_completed=True if user already checked in today.
+    Returns empty lists + already_completed=True if user already checked in today
+    OR if they've hit the weekly cap.
     """
-    # Use Eastern Time for the display date and weekly check
     today_et = datetime.now(EASTERN).date()
 
+    # Gate 1: Already checked in today
     if _has_checked_in_today(db, user.id):
+        return TodaysQuestionsOut(
+            date=str(today_et),
+            daily_questions=[],
+            weekly_questions=[],
+            is_weekly_day=False,
+            already_completed=True,
+        )
+
+    # Gate 2: Weekly cap reached (rolling 7-day window)
+    if _checkins_in_rolling_week(db, user.id) >= MAX_CHECKINS_PER_WEEK:
         return TodaysQuestionsOut(
             date=str(today_et),
             daily_questions=[],
@@ -161,7 +216,9 @@ def submit_checkin(
     Accept user's check-in answers, save them, compute updated metrics,
     recompute the GFCI in real-time, and return the reward payload.
 
-    DATA QUALITY: Returns HTTP 409 if user already submitted today (Eastern Time).
+    DATA QUALITY:
+      - Returns HTTP 409 if user already submitted today (Eastern Time).
+      - Returns HTTP 429 if user has hit 7 check-ins in the rolling 7-day window.
     """
     if not payload.answers:
         raise HTTPException(
@@ -169,11 +226,20 @@ def submit_checkin(
             detail="No answers provided.",
         )
 
-    # ── One check-in per day — hard server-side enforcement (Eastern Time) ──
+    # ── Gate 1: One check-in per day (Eastern Time) ──
     if _has_checked_in_today(db, user.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You've already completed today's check-in. Come back tomorrow.",
+        )
+
+    # ── Gate 2: Rolling 7-day weekly cap ──
+    weekly_count = _checkins_in_rolling_week(db, user.id)
+    if weekly_count >= MAX_CHECKINS_PER_WEEK:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"You've completed {MAX_CHECKINS_PER_WEEK} check-ins in the last 7 days. "
+                   f"Your next check-in slot opens when your oldest one in the window ages out.",
         )
 
     # 1. Capture previous snapshot BEFORE recomputing (needed for accurate delta)
@@ -207,18 +273,8 @@ def submit_checkin(
     # 5. Final commit
     db.commit()
 
-    # 6. Count check-ins this week for the canonical snapshot
-    week_start = datetime.now(timezone.utc) - timedelta(days=7)
-    checkins_this_week = (
-        db.query(func.count(CheckInResponse.id))
-        .filter(
-            and_(
-                CheckInResponse.user_id == user.id,
-                CheckInResponse.checkin_date >= week_start,
-            )
-        )
-        .scalar() or 0
-    )
+    # 6. Count check-ins this week — DISTINCT DAYS, not response rows
+    checkins_this_week = _checkins_in_rolling_week(db, user.id)
 
     # 7. Build canonical snapshot — powers all dashboard tiles
     metrics_snapshot = _build_snapshot(
