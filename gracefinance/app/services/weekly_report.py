@@ -1,28 +1,17 @@
 """
 Weekly Report Service — Personalized + Index Digest
 ════════════════════════════════════════════════════
+v1.1 — Fixes:
+  - API key loaded from config, not os.getenv
+  - checkins_this_week counts distinct days, not response rows
+  - HTML-escapes user names in email templates
+
 Runs every Sunday at 6:00 PM ET (23:00 UTC).
-Uses Google Workspace SMTP (same config as daily_emails.py).
-
-Env vars (already set in Railway):
-  SMTP_HOST=smtp.gmail.com
-  SMTP_PORT=587
-  SMTP_USER=support@gracefinance.co
-  SMTP_PASSWORD=<16-char app password>
-
-Two reports in one email:
-  1. INDEX REPORT (all users) — GF-RWI, contributors, population BSI
-  2. PERSONAL REPORT (tier-gated):
-     Free:    FCS score + upgrade teaser
-     Pro:     Full breakdown + dimensions + BSI patterns
-     Premium: Everything + Grace AI weekly insight
-
-File: app/services/weekly_report.py
 """
 
-import os
 import smtplib
 import logging
+from html import escape as html_escape
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
@@ -30,7 +19,7 @@ from zoneinfo import ZoneInfo
 from typing import Optional, Dict
 
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_, func, distinct
+from sqlalchemy import desc, and_, func, distinct, cast, Date
 
 from app.database import SessionLocal
 from app.models import User
@@ -43,9 +32,7 @@ settings = get_settings()
 
 EASTERN = ZoneInfo("America/New_York")
 
-# Use reports@ as the From address, but authenticate with support@ (same Workspace)
-# If you want reports@ to send directly, create an alias in Google Admin
-FROM_EMAIL = settings.smtp_user  # support@gracefinance.co
+FROM_EMAIL = settings.smtp_user
 FROM_NAME = "GraceFinance"
 
 
@@ -129,8 +116,12 @@ def _build_index_report(db: Session) -> Dict:
         .first()
     )
 
+    # Active contributors in last 14 days
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(days=14)
     contributors = (
-        db.query(func.count(distinct(CheckInResponse.user_id))).scalar() or 0
+        db.query(func.count(distinct(CheckInResponse.user_id)))
+        .filter(CheckInResponse.checkin_date >= stale_cutoff)
+        .scalar() or 0
     )
 
     pop_bsi = compute_population_bsi(db)
@@ -171,9 +162,10 @@ def _build_personal_report(db: Session, user: User, tier: str) -> Dict:
         .first()
     )
 
+    # FIX: Count distinct check-in DAYS, not response rows
     week_start = datetime.now(timezone.utc) - timedelta(days=7)
     checkins = (
-        db.query(func.count(CheckInResponse.id))
+        db.query(func.count(func.distinct(cast(CheckInResponse.checkin_date, Date))))
         .filter(and_(CheckInResponse.user_id == user.id, CheckInResponse.checkin_date >= week_start))
         .scalar() or 0
     )
@@ -239,7 +231,11 @@ def _build_personal_report(db: Session, user: User, tier: str) -> Dict:
 # ═══════════════════════════════════════════════════════════════
 
 def _generate_grace_weekly_insight(db: Session, user: User, report: Dict) -> Optional[str]:
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    # FIX: Use config for API key, not os.getenv
+    api_key = settings.anthropic_api_key
+    if not api_key:
+        import os
+        api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         return None
 
@@ -299,21 +295,20 @@ def _generate_grace_weekly_insight(db: Session, user: User, report: Dict) -> Opt
 # ═══════════════════════════════════════════════════════════════
 
 def _render_email(user, tier, index_report, personal, grace_insight=None) -> str:
-    name = user.first_name or "there"
+    # FIX: HTML-escape user name
+    name = html_escape(user.first_name or "there")
     fcs = personal.get("fcs")
     fcs_delta = personal.get("fcs_delta")
     fcs_band = personal.get("fcs_band", "")
     streak = personal.get("streak", 0)
     checkins = personal.get("checkins_this_week", 0)
 
-    # FCS delta
     fcs_delta_html = ""
     if fcs_delta is not None:
         arrow = "↑" if fcs_delta > 0 else "↓" if fcs_delta < 0 else "→"
         color = "#10b981" if fcs_delta > 0 else "#ef4444" if fcs_delta < 0 else "#666"
         fcs_delta_html = f'<span style="color:{color};font-weight:600">{arrow} {abs(fcs_delta):.1f}</span>'
 
-    # Index
     gfci = index_report.get("gfci")
     contributors = index_report.get("contributors", 0)
     gfci_delta = index_report.get("gfci_delta")
@@ -323,7 +318,6 @@ def _render_email(user, tier, index_report, personal, grace_insight=None) -> str
         color = "#10b981" if gfci_delta > 0 else "#ef4444" if gfci_delta < 0 else "#666"
         gfci_delta_html = f'<span style="color:{color}">{arrow} {abs(gfci_delta):.1f}</span>'
 
-    # Dimensions (Pro+)
     dims_html = ""
     if tier in ("pro", "premium") and personal.get("dimensions"):
         rows = ""
@@ -341,7 +335,6 @@ def _render_email(user, tier, index_report, personal, grace_insight=None) -> str
             <table style="width:100%;border-collapse:collapse">{rows}</table>
         </div>'''
 
-    # BSI (Pro+)
     bsi_html = ""
     if tier in ("pro", "premium") and personal.get("bsi"):
         bsi = personal["bsi"]
@@ -349,13 +342,13 @@ def _render_email(user, tier, index_report, personal, grace_insight=None) -> str
 
         patterns_html = ""
         for p in (bsi.get("stress_patterns") or []):
-            patterns_html += f'<div style="color:#ef4444;font-size:12px;margin:4px 0">⚠ {p["label"]}</div>'
+            patterns_html += f'<div style="color:#ef4444;font-size:12px;margin:4px 0">⚠ {html_escape(str(p.get("label", "")))}</div>'
         for p in (bsi.get("positive_patterns") or []):
-            patterns_html += f'<div style="color:#10b981;font-size:12px;margin:4px 0">✓ {p["label"]}</div>'
+            patterns_html += f'<div style="color:#10b981;font-size:12px;margin:4px 0">✓ {html_escape(str(p.get("label", "")))}</div>'
 
         reflections_html = ""
         for r in (bsi.get("coaching_reflections") or [])[:2]:
-            reflections_html += f'<p style="color:#999;font-size:12px;line-height:1.6;margin:8px 0 0;font-style:italic">{r.get("reflection", "")}</p>'
+            reflections_html += f'<p style="color:#999;font-size:12px;line-height:1.6;margin:8px 0 0;font-style:italic">{html_escape(str(r.get("reflection", "")))}</p>'
 
         bsi_html = f'''
         <div style="margin:24px 0;padding:20px;background:#111;border:1px solid #222;border-radius:10px">
@@ -365,7 +358,6 @@ def _render_email(user, tier, index_report, personal, grace_insight=None) -> str
             {reflections_html}
         </div>'''
 
-    # Grace insight (Premium)
     grace_html = ""
     if grace_insight:
         grace_html = f'''
@@ -373,10 +365,9 @@ def _render_email(user, tier, index_report, personal, grace_insight=None) -> str
             <div style="margin-bottom:12px">
                 <span style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.08em">Grace's Weekly Insight</span>
             </div>
-            <p style="color:#ccc;font-size:14px;line-height:1.7;margin:0">{grace_insight}</p>
+            <p style="color:#ccc;font-size:14px;line-height:1.7;margin:0">{html_escape(grace_insight)}</p>
         </div>'''
 
-    # Upgrade CTA (Free)
     upgrade_html = ""
     if tier == "free":
         upgrade_html = '''
@@ -431,7 +422,8 @@ def _render_email(user, tier, index_report, personal, grace_insight=None) -> str
         <hr style="border:none;border-top:1px solid #1a1a1a;margin:28px 0 20px">
         <p style="font-size:11px;color:#444;text-align:center;margin:0">
             GraceFinance · Where Financial Confidence Is Measured.<br>
-            <a href="https://gracefinance.co" style="color:#555;text-decoration:none">gracefinance.co</a>
+            <a href="https://gracefinance.co" style="color:#555;text-decoration:none">gracefinance.co</a><br>
+            <a href="https://gracefinance.co/settings" style="color:#444;text-decoration:none;font-size:10px">Email preferences</a>
         </p>
     </div>
 </body>
@@ -470,6 +462,8 @@ def _render_plain(user, personal, index_report) -> str:
         f"Contributors: {index_report.get('contributors', 0)}",
         "",
         "Open your dashboard: https://gracefinance.co/dashboard",
+        "",
+        "Manage email preferences: https://gracefinance.co/settings",
         "",
         "GraceFinance — Where Financial Confidence Is Measured.",
     ])

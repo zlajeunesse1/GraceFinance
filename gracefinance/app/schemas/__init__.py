@@ -181,6 +181,7 @@ class AvalancheAllocation(BaseModel):
 
 class CheckoutRequest(BaseModel):
     tier: str
+    interval: str = "monthly"  # FIX #5: Added — billing router reads this field
 
 
 class CheckoutResponse(BaseModel):
