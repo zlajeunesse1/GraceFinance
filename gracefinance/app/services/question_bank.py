@@ -1,15 +1,16 @@
 """
-Question Bank — v6.2
+Question Bank — v6.3
 ═════════════════════
-CHANGES FROM v6.1:
-  - is_weekly_checkin_day() now always returns False
-    Weekly BSI questions (BX-*) are disabled from the daily check-in flow.
-    Always 5 questions. Clean, fast, consistent experience every day.
-    BSI data can be reactivated later via a dedicated weekly prompt or
-    a separate endpoint when the UX is ready for it.
+CHANGES FROM v6.2:
+  - FIX #1 (CRITICAL): Replaced Python's hash() with hashlib.sha256 for
+    question randomization seed. hash() uses PYTHONHASHSEED (randomized by
+    default since Python 3.3), so a container restart mid-day would change
+    which questions users see. sha256 is deterministic across restarts.
+  - Added explanatory comment on INVERTED_QUESTION_IDS empty set.
 """
 
 import random
+import hashlib
 from datetime import date, datetime, timezone
 from dataclasses import dataclass
 from typing import List, Dict
@@ -382,6 +383,11 @@ DAILY_QUESTIONS: Dict[str, CheckInQuestion] = {
 }
 
 
+# No questions currently require runtime inversion.
+# All negative-framed questions (e.g., CS-3 "How often did unexpected expenses disrupt...")
+# have their scale direction pre-flipped via low_label/high_label at the question level.
+# If a future question needs 5=bad and 1=good, add its ID here and normalize_answer()
+# in checkin_service.py will flip it automatically.
 INVERTED_QUESTION_IDS = set()
 
 
@@ -462,11 +468,28 @@ def _utc_today() -> date:
     return datetime.now(timezone.utc).date()
 
 
+def _deterministic_seed(user_id, target_date) -> int:
+    """
+    FIX #1 (CRITICAL): Deterministic seed for question selection.
+
+    Uses SHA-256 instead of Python's hash(). Python's hash() is randomized
+    via PYTHONHASHSEED by default (since 3.3), so a container restart mid-day
+    would change which questions a user sees — potentially different from the
+    questions they already answered in the GET /questions call.
+
+    SHA-256 is deterministic regardless of process restarts, platform, or
+    Python version.
+    """
+    raw = f"{user_id}:{target_date.isoformat()}"
+    digest = hashlib.sha256(raw.encode()).hexdigest()
+    return int(digest, 16)
+
+
 def get_daily_questions(user_id, target_date=None, count=5):
     if target_date is None:
         target_date = _utc_today()
 
-    seed = hash(f"{user_id}:{target_date.isoformat()}")
+    seed = _deterministic_seed(user_id, target_date)
     rng = random.Random(seed)
 
     dimensions = list(DIMENSION_POOLS.keys())

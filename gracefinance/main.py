@@ -7,8 +7,11 @@ Run locally:
 
 API docs available at:
     http://localhost:8000/docs
+
+FIX #11 (MEDIUM): Scheduler jobs now log errors instead of silently swallowing them.
 """
 
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -33,6 +36,8 @@ from app.services.gfci_engine import compute_daily_gfci
 from app.services.weekly_report import send_weekly_reports
 from app.routers.bsi_router import router as bsi_router
 
+logger = logging.getLogger("gracefinance")
+
 settings = get_settings()
 
 # Create tables (use Alembic migrations in production)
@@ -47,15 +52,30 @@ def scheduled_index_compute():
     try:
         compute_daily_gfci(db)
         db.commit()
-    except Exception:
+        logger.info("Scheduled GFCI compute completed successfully")
+    except Exception as e:
         db.rollback()
+        logger.error(f"Scheduled GFCI compute failed: {e}", exc_info=True)
     finally:
         db.close()
 
 
 def scheduled_daily_emails():
     """Wrapper for daily engagement emails with its own DB session."""
-    send_daily_engagement_emails()
+    try:
+        send_daily_engagement_emails()
+        logger.info("Daily engagement emails sent successfully")
+    except Exception as e:
+        logger.error(f"Daily engagement emails failed: {e}", exc_info=True)
+
+
+def scheduled_weekly_reports():
+    """Wrapper for weekly reports with error handling."""
+    try:
+        send_weekly_reports()
+        logger.info("Weekly reports sent successfully")
+    except Exception as e:
+        logger.error(f"Weekly reports failed: {e}", exc_info=True)
 
 
 # ── App initialization ──
@@ -83,8 +103,6 @@ scheduler.add_job(
 )
 
 # Daily index recompute — 12:05 AM EST (05:05 UTC)
-# Fires just after midnight ET so the index refreshes every day,
-# even if no one checks in. Also handles the date rollover cleanly.
 scheduler.add_job(
     scheduled_index_compute,
     "cron",
@@ -95,10 +113,8 @@ scheduler.add_job(
 )
 
 # Weekly personalized reports — Sunday 6:00 PM EST (23:00 UTC)
-# Sends index digest + personalized FCS/BSI breakdown to all users.
-# Premium users get a Grace AI weekly insight.
 scheduler.add_job(
-    send_weekly_reports,
+    scheduled_weekly_reports,
     "cron",
     day_of_week="sun",
     hour=23,
