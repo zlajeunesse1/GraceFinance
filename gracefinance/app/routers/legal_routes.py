@@ -16,9 +16,11 @@ from fastapi.responses import HTMLResponse, FileResponse
 
 router = APIRouter(tags=["legal"])
 
-# Resolve the static directory relative to this file's location
-# Adjust if your project structure differs
-LEGAL_DIR = Path(__file__).parent / "static" / "legal"
+# FIX: Resolve from project root, not relative to this file's folder.
+# This file lives at app/routers/legal_routes.py
+# Project root is 2 levels up: app/routers/ → app/ → project root
+# static/legal/ is at the project root level
+LEGAL_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "legal"
 
 
 def _serve_html(filename: str) -> HTMLResponse:
@@ -79,34 +81,3 @@ def get_legal_links():
         "privacy_policy": "/legal/privacy",
         "refund_policy": "/legal/refund",
     }
-
-
-# ─────────────────────────────────────────────
-# Integration instructions
-# ─────────────────────────────────────────────
-#
-# In your main.py, add:
-#
-#   from legal_routes import router as legal_router
-#   app.include_router(legal_router)
-#
-# That's it. No changes to existing routes.
-#
-# Your legal pages will be available at:
-#   https://gracefinance.co/legal/terms
-#   https://gracefinance.co/legal/privacy
-#   https://gracefinance.co/legal/refund
-#
-# For Stripe Checkout, reference these URLs when creating sessions:
-#
-#   session = stripe.checkout.Session.create(
-#       ...
-#       consent_collection={"terms_of_service": "required"},
-#       custom_text={
-#           "terms_of_service_acceptance": {
-#               "message": "I agree to the [Terms of Service](https://gracefinance.co/legal/terms) and [Privacy Policy](https://gracefinance.co/legal/privacy)"
-#           }
-#       },
-#   )
-#
-# ─────────────────────────────────────────────
