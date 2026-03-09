@@ -1,9 +1,9 @@
 /**
- * SignupPage — v6.4
- * FIX: LegalModal fetches actual static HTML files (terms.html, privacy.html)
- *      instead of hitting a JSON API endpoint that doesn't exist.
- * FIX: Renders HTML content properly with styled container.
- * KEPT: Checkbox validation, pricing link, verify pending flow.
+ * SignupPage — v6.5
+ * FIX: LegalModal now fetches directly from backend /legal/{type} endpoint
+ *      and reads response as .text() (HTML), not .json().
+ *      The backend serves actual HTML at /legal/terms, /legal/privacy, /legal/refund.
+ *      Previous version tried 3 fallback paths and parsed as JSON — all failed silently.
  */
 
 import { useState, useEffect } from 'react'
@@ -17,15 +17,6 @@ var API_BASE = window.location.hostname === 'localhost'
 
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
 
-/**
- * LegalModal — loads static HTML legal pages and renders them.
- *
- * Fetch order:
- *   1. Try frontend static path: /static/legal/{type}.html
- *   2. Fallback to backend:      API_BASE/static/legal/{type}.html
- *
- * Renders the HTML inside a styled, scrollable modal.
- */
 function LegalModal(props) {
   var type = props.type
   var onClose = props.onClose
@@ -35,22 +26,15 @@ function LegalModal(props) {
 
   var titles = { terms: "Terms of Service", privacy: "Privacy Policy", refund: "Refund Policy" }
 
-  // Map type to filename
-  var fileMap = { terms: "terms.html", privacy: "privacy.html", refund: "refund.html" }
-  var filename = fileMap[type] || type + ".html"
-
   useEffect(function () {
     setIsLoading(true)
     setHasError(false)
     setContent(null)
 
-    // Try frontend static path first, then backend
-    var frontendUrl = "/static/legal/" + filename
-    var backendUrl = API_BASE + "/static/legal/" + filename
-
-    fetch(frontendUrl)
+    // Backend serves HTML directly at /legal/terms, /legal/privacy, /legal/refund
+    fetch(API_BASE + "/legal/" + type)
       .then(function (res) {
-        if (!res.ok) throw new Error("Frontend 404")
+        if (!res.ok) throw new Error("Failed to load")
         return res.text()
       })
       .then(function (html) {
@@ -58,54 +42,11 @@ function LegalModal(props) {
         setIsLoading(false)
       })
       .catch(function () {
-        // Fallback: try backend static serving
-        fetch(backendUrl)
-          .then(function (res) {
-            if (!res.ok) throw new Error("Backend 404")
-            return res.text()
-          })
-          .then(function (html) {
-            setContent(html)
-            setIsLoading(false)
-          })
-          .catch(function () {
-            // Final fallback: try the old JSON endpoint
-            fetch(API_BASE + "/legal/" + type)
-              .then(function (res) {
-                if (!res.ok) throw new Error("API 404")
-                return res.json()
-              })
-              .then(function (data) {
-                // Convert JSON to displayable text
-                if (data.sections) {
-                  var html = data.sections.map(function (s) {
-                    var out = ''
-                    if (s.title) out += '<h3 style="color:#fff;font-size:14px;font-weight:600;margin:0 0 8px">' + s.title + '</h3>'
-                    if (s.content) out += '<p style="color:#ccc;font-size:13px;line-height:1.8;margin:0 0 12px;white-space:pre-wrap">' + s.content + '</p>'
-                    if (s.items) {
-                      out += s.items.map(function (item) {
-                        return '<p style="color:#aaa;font-size:12px;line-height:1.7;margin:6px 0 0 16px">• ' + item + '</p>'
-                      }).join('')
-                    }
-                    return '<div style="margin-bottom:20px">' + out + '</div>'
-                  }).join('')
-                  setContent(html)
-                } else if (typeof data === 'string') {
-                  setContent('<p style="color:#ccc;font-size:13px;line-height:1.8;white-space:pre-wrap">' + data + '</p>')
-                } else {
-                  setContent('<pre style="color:#ccc;font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-word">' + JSON.stringify(data, null, 2) + '</pre>')
-                }
-                setIsLoading(false)
-              })
-              .catch(function () {
-                setHasError(true)
-                setIsLoading(false)
-              })
-          })
+        setHasError(true)
+        setIsLoading(false)
       })
   }, [type])
 
-  // Styles injected into the HTML content container to make raw legal HTML look good on dark bg
   var contentStyles = "\
     .legal-content { color: #ccc; font-size: 13px; line-height: 1.8; font-family: " + FONT + "; }\
     .legal-content h1 { color: #fff; font-size: 18px; font-weight: 600; margin: 0 0 16px; }\
