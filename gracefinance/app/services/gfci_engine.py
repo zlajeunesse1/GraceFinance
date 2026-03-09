@@ -1,15 +1,22 @@
 """
 GFCI Engine — GraceFinance Composite Index
 ═══════════════════════════════════════════════
-v2.1 — Fixed orphan snapshot counting
+v2.2 — Early-stage fixes
 
-CHANGES FROM v2.0:
-  - Snapshot query now joins against users table to exclude
-    orphaned snapshots from deleted users
-  - user_count reflects only active users
+CHANGES FROM v2.1:
+  - MIN_USERS_FOR_INDEX lowered to 1 (preview mode). The index always
+    computes if there's at least 1 eligible user. The "published" vs
+    "beta" vs "preview" tier label communicates credibility instead of
+    blocking computation entirely.
+  - Upserts today's index row instead of creating duplicates. Uses
+    index_date (date, not datetime) to dedup — one row per segment
+    per calendar day.
+  - contributor_count helper uses stale_cutoff (14d) for active count.
+  - compute_daily_gfci returns the index even with 1 user so the
+    dashboard always has data during early testing/launch.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date as date_type
 from typing import List, Optional, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, desc
@@ -25,9 +32,10 @@ from app.models import User
 
 INDEX_EMA_ALPHA: float = 0.10
 
-# Credibility thresholds
-MIN_USERS_FOR_INDEX: int = 50          # minimum to compute at all
-MIN_USERS_FOR_PUBLISHED: int = 200     # minimum to label as "published"
+# Credibility tiers (labels only — no longer blocks computation)
+MIN_USERS_FOR_PUBLISHED: int = 200     # "published" tier
+MIN_USERS_FOR_BETA: int = 50           # "beta" tier
+# Below 50 = "preview" tier — still computes, just labeled accordingly
 
 CONFIDENCE_FULL_WEIGHT: float = 50.0
 CONFIDENCE_REDUCED_WEIGHT: float = 0.3
@@ -94,11 +102,32 @@ def _compute_distribution(scores):
 
 
 # ══════════════════════════════════════════
+#  ACTIVE CONTRIBUTOR COUNT
+# ══════════════════════════════════════════
+
+def get_active_contributor_count(db: Session) -> int:
+    """
+    Count distinct users who have submitted at least one check-in
+    within the STALE_USER_DAYS window (14 days). This is the real
+    'active contributors' number — not all-time.
+    """
+    from app.models.checkin import CheckInResponse
+
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(days=STALE_USER_DAYS)
+    return (
+        db.query(func.count(func.distinct(CheckInResponse.user_id)))
+        .filter(CheckInResponse.checkin_date >= stale_cutoff)
+        .scalar() or 0
+    )
+
+
+# ══════════════════════════════════════════
 #  MAIN GFCI COMPUTATION
 # ══════════════════════════════════════════
 
 def compute_daily_gfci(db, segment="national"):
     now = datetime.now(timezone.utc)
+    today = now.date()
     stale_cutoff = now - timedelta(days=STALE_USER_DAYS)
 
     # Get latest snapshot per ACTIVE user (excludes orphaned snapshots)
@@ -141,7 +170,7 @@ def compute_daily_gfci(db, segment="national"):
             continue
         user = db.query(User).filter(User.id == snap.user_id).first()
         if not user:
-            continue  # extra safety — skip if user was deleted between queries
+            continue
         weight = _compute_user_weight(snap, user)
         weighted_scores.append((float(snap.fcs_composite), weight))
         raw_scores.append(float(snap.fcs_composite))
@@ -163,7 +192,7 @@ def compute_daily_gfci(db, segment="national"):
     # Distribution analysis
     dist = _compute_distribution(raw_scores)
 
-    # EMA smoothing
+    # EMA smoothing against previous index
     previous_index = _get_latest_index(db, segment)
     prev_value = (
         previous_index.gf_rwi_composite
@@ -223,21 +252,42 @@ def compute_daily_gfci(db, segment="national"):
             elif gci_slope_3d < -0.1:
                 trend_direction = "DOWN"
 
-    # Persist
-    index = DailyIndex(
-        index_date=now,
-        segment=segment,
-        fcs_value=raw_gfci,
-        gf_rwi_composite=smoothed,
-        user_count=user_count,
-        computed_at=now,
-        trend_direction=trend_direction,
-        gci_slope_3d=gci_slope_3d,
-        gci_slope_7d=gci_slope_7d,
-        gci_volatility_7d=gci_volatility_7d,
+    # ── Upsert: one row per segment per calendar day ──
+    existing = (
+        db.query(DailyIndex)
+        .filter(
+            DailyIndex.segment == segment,
+            func.date(DailyIndex.index_date) == today,
+        )
+        .first()
     )
 
-    db.add(index)
+    if existing:
+        # Update in place — no duplicate rows
+        existing.fcs_value = raw_gfci
+        existing.gf_rwi_composite = smoothed
+        existing.user_count = user_count
+        existing.computed_at = now
+        existing.trend_direction = trend_direction
+        existing.gci_slope_3d = gci_slope_3d
+        existing.gci_slope_7d = gci_slope_7d
+        existing.gci_volatility_7d = gci_volatility_7d
+        index = existing
+    else:
+        index = DailyIndex(
+            index_date=now,
+            segment=segment,
+            fcs_value=raw_gfci,
+            gf_rwi_composite=smoothed,
+            user_count=user_count,
+            computed_at=now,
+            trend_direction=trend_direction,
+            gci_slope_3d=gci_slope_3d,
+            gci_slope_7d=gci_slope_7d,
+            gci_volatility_7d=gci_volatility_7d,
+        )
+        db.add(index)
+
     db.commit()
     db.refresh(index)
     return index
@@ -286,7 +336,7 @@ def get_index_confidence_tier(user_count: int) -> str:
     """Return the credibility tier label for the current index."""
     if user_count >= MIN_USERS_FOR_PUBLISHED:
         return "published"
-    elif user_count >= MIN_USERS_FOR_INDEX:
+    elif user_count >= MIN_USERS_FOR_BETA:
         return "beta"
     else:
         return "preview"

@@ -1,6 +1,8 @@
 """
 Index Router — Grace Financial Confidence Index (GFCI)
 ═══════════════════════════════════════════════════════
+v2.2 — Fixed contributor count, added confidence tier
+
 Endpoints:
   GET  /index/latest            → Current GFCI composite + pillar breakdown + contributor count
   GET  /index/history           → GFCI over time for trending
@@ -10,7 +12,7 @@ Endpoints:
   POST /index/reset-user-data   → Wipe all test data (dev only)
   GET  /index/methodology       → Public methodology documentation
 
-Wired to: app/services/gfci_engine.py (v4 institutional engine)
+Wired to: app/services/gfci_engine.py (v2.2 engine)
 """
 
 from fastapi import APIRouter, Depends
@@ -21,6 +23,8 @@ from app.database import get_db
 from app.services.gfci_engine import (
     compute_daily_gfci,
     get_gfci_history,
+    get_active_contributor_count,
+    get_index_confidence_tier,
 )
 from app.models.checkin import DailyIndex, CheckInResponse
 
@@ -33,7 +37,7 @@ def latest_index(
     segment: str = "national",
     db: Session = Depends(get_db),
 ):
-    """Get the most recent GFCI composite, trend data, and contributor count."""
+    """Get the most recent GFCI composite, trend data, and active contributor count."""
     index = (
         db.query(DailyIndex)
         .filter(DailyIndex.segment == segment)
@@ -41,21 +45,23 @@ def latest_index(
         .first()
     )
 
-    # Total unique users who have ever submitted a check-in
-    contributor_count = (
-        db.query(sqlfunc.count(distinct(CheckInResponse.user_id))).scalar() or 0
-    )
+    # Active contributors within the stale window (14 days), not all-time
+    contributor_count = get_active_contributor_count(db)
 
     if not index:
         return {
             "published": False,
+            "confidence_tier": "preview",
             "message": "No index data yet. Need check-ins from users first.",
             "gfci_composite": None,
             "contributors": contributor_count,
         }
 
+    tier = get_index_confidence_tier(index.user_count)
+
     return {
         "published": True,
+        "confidence_tier": tier,
         "index_date": index.index_date.isoformat(),
         "segment": index.segment,
         "gfci_composite": index.gf_rwi_composite,
@@ -114,6 +120,7 @@ def trigger_compute(
 
     return {
         "message": "GFCI computed and saved",
+        "confidence_tier": get_index_confidence_tier(index.user_count),
         "gfci_composite": index.gf_rwi_composite,
         "fcs_average": index.fcs_value,
         "user_count": index.user_count,
@@ -185,15 +192,15 @@ def methodology():
         "scoring_engine": {
             "individual_score": "Financial Confidence Score (FCS)",
             "range": "0–100",
-            "smoothing": "EMA α=0.15",
+            "smoothing": "EMA α=0.15 (adaptive for new users)",
             "windows": {
                 "30d": {"weight": 0.20, "role": "Recent behavioral signal"},
                 "60d": {"weight": 0.35, "role": "Trend signal"},
                 "90d": {"weight": 0.45, "role": "Baseline stability signal"},
             },
             "movement_caps": {
-                "fcs_per_day": "±3 points",
-                "pillar_per_day": "±2 points",
+                "fcs_per_day": "±3 points (adaptive: up to ±10 for new users)",
+                "pillar_per_day": "±2 points (adaptive: up to ±15 for new users)",
             },
             "pillars": {
                 "current_stability": {"weight": 0.30, "signals": "Payment compliance, income predictability"},
@@ -208,7 +215,11 @@ def methodology():
             "aggregation": "Participation-weighted mean of individual FCS scores",
             "smoothing": "EMA α=0.10",
             "movement_cap": "±5 points per day",
-            "minimum_users": 10,
+            "confidence_tiers": {
+                "preview": "< 50 active users",
+                "beta": "50–199 active users",
+                "published": "200+ active users",
+            },
             "stale_cutoff": "14 days",
         },
         "behavioral_shift_indicator": {
@@ -226,9 +237,10 @@ def methodology():
         "data_integrity": [
             "Outlier dampening (2σ threshold)",
             "Multi-window blending prevents single-day distortion",
-            "Movement caps prevent artificial volatility",
+            "Adaptive movement caps (responsive early, stable at maturity)",
             "Minimum participation thresholds for confident scores",
             "Consistency weighting rewards regular engagement",
+            "Daily upsert prevents duplicate index entries",
         ],
-        "computation_schedule": "Daily at 12:05 AM ET (05:05 UTC)",
+        "computation_schedule": "Daily at 12:05 AM ET (05:05 UTC) + real-time after each check-in",
     }

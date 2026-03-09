@@ -267,8 +267,9 @@ def submit_checkin(
     # 4b. Recompute GFCI with fresh data — real-time index update
     try:
         compute_daily_gfci(db)
-    except Exception:
-        pass  # Index failure should never block a user's check-in
+    except Exception as e:
+        import logging
+        logging.error(f"GFCI compute failed after check-in: {e}")
 
     # 5. Final commit
     db.commit()
