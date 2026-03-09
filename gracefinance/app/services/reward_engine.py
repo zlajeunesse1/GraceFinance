@@ -1,26 +1,35 @@
 """
-GraceFinance Reward Engine
-===========================
+GraceFinance Reward Engine — v1.1
+==================================
+CHANGES FROM v1.0:
+  FIX #5 (HIGH): Removed duplicate streak computation. Now reads
+    user.current_streak directly (set by checkin_service._update_streak).
+    Single source of truth — no more two algorithms disagreeing.
+  FIX #6 (HIGH): Replaced all date.today() with Eastern Time date,
+    matching the check-in system's timezone anchor.
+
 Computes the instant gratification payload after a check-in.
-
-Layer A (Instant): This runs synchronously inside POST /checkins.
-
-Responsibilities:
-  1. Compute before/after score deltas per dimension
-  2. Calculate and update streak
-  3. Generate Grace mini-summary (deterministic, no API call)
-  4. Pick the weakest dimension and a behavior nudge
-
-Place at: app/services/reward_engine.py
+Runs synchronously inside POST /checkins.
 """
 
+import hashlib
 from datetime import datetime, date, timezone, timedelta
 from typing import Optional, Dict, Tuple
+from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, cast, Date
 
 from app.models.checkin import CheckInResponse, UserMetricSnapshot
 from app.services.checkin_service import FCS_WEIGHTS
+
+
+# ── Timezone anchor — matches check-in system ────────────────────────────────
+EASTERN = ZoneInfo("America/New_York")
+
+
+def _et_today() -> date:
+    """Return today's date in Eastern Time, consistent with the check-in system."""
+    return datetime.now(EASTERN).date()
 
 
 # ============================================================
@@ -105,11 +114,9 @@ GRACE_SUMMARIES = {
 
 
 def _pick_summary(scenario: str, streak: int = 0) -> str:
-    """Pick a deterministic-ish summary based on today's date."""
-    import hashlib
-
+    """Pick a deterministic summary based on today's date (ET)."""
     summaries = GRACE_SUMMARIES.get(scenario, GRACE_SUMMARIES["steady"])
-    today_str = date.today().isoformat()
+    today_str = _et_today().isoformat()
     idx = int(hashlib.md5(today_str.encode()).hexdigest(), 16) % len(summaries)
     text = summaries[idx]
     return text.format(streak=streak) if "{streak}" in text else text
@@ -127,9 +134,12 @@ def compute_reward(
     Called synchronously after save_responses() and compute_user_snapshot().
     Returns a dict matching the CheckinReward schema.
     """
+    from app.models import User
+    user = db.query(User).filter(User.id == user_id).first()
 
-    # -- 1. Streak calculation --
-    streak, is_milestone = _compute_streak(db, user_id)
+    # -- 1. Read streak from single source of truth (set by checkin_service._update_streak) --
+    streak = getattr(user, "current_streak", 0) or 0 if user else 1
+    is_milestone = streak in MILESTONE_STREAKS
 
     # -- 2. Score deltas --
     deltas = _compute_deltas(new_snapshot, previous_snapshot)
@@ -167,52 +177,6 @@ def compute_reward(
 # ============================================================
 #  INTERNAL HELPERS
 # ============================================================
-
-def _compute_streak(db: Session, user_id) -> Tuple[int, bool]:
-    """
-    Compute streak from check-in history.
-    Returns (streak_count, is_milestone).
-    """
-    today = date.today()
-
-    checkin_dates = (
-        db.query(func.distinct(cast(CheckInResponse.checkin_date, Date)))
-        .filter(CheckInResponse.user_id == user_id)
-        .order_by(cast(CheckInResponse.checkin_date, Date).desc())
-        .limit(400)
-        .all()
-    )
-
-    dates = sorted([row[0] for row in checkin_dates], reverse=True)
-
-    if not dates:
-        return 1, (1 in MILESTONE_STREAKS)
-
-    streak = 1
-    for i in range(len(dates) - 1):
-        if dates[i] == today and i == 0:
-            continue
-        expected_prev = dates[i] - timedelta(days=1)
-        if i + 1 < len(dates) and dates[i + 1] == expected_prev:
-            streak += 1
-        else:
-            break
-
-    if dates[0] != today:
-        if dates[0] == today - timedelta(days=1):
-            streak = 1
-            for i in range(len(dates) - 1):
-                if dates[i] - timedelta(days=1) == dates[i + 1]:
-                    streak += 1
-                else:
-                    break
-            streak += 1
-        else:
-            streak = 1
-
-    is_milestone = streak in MILESTONE_STREAKS
-    return streak, is_milestone
-
 
 def _compute_deltas(
     new_snap: UserMetricSnapshot,
@@ -267,10 +231,9 @@ def _pick_nudge(snapshot: UserMetricSnapshot) -> Tuple[Optional[str], Optional[d
             weakest_dim = dim
 
     if weakest_dim and weakest_dim in DIMENSION_META:
-        import hashlib
         meta = DIMENSION_META[weakest_dim]
         tips = meta["tips"]
-        today_str = date.today().isoformat()
+        today_str = _et_today().isoformat()
         idx = int(hashlib.md5((today_str + weakest_dim).encode()).hexdigest(), 16) % len(tips)
         return weakest_dim, {
             "dimension": weakest_dim,

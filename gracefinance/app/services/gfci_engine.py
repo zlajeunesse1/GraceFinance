@@ -1,19 +1,12 @@
 """
 GFCI Engine — GraceFinance Composite Index
 ═══════════════════════════════════════════════
-v2.2 — Early-stage fixes
+v2.3 — Performance fixes
 
-CHANGES FROM v2.1:
-  - MIN_USERS_FOR_INDEX lowered to 1 (preview mode). The index always
-    computes if there's at least 1 eligible user. The "published" vs
-    "beta" vs "preview" tier label communicates credibility instead of
-    blocking computation entirely.
-  - Upserts today's index row instead of creating duplicates. Uses
-    index_date (date, not datetime) to dedup — one row per segment
-    per calendar day.
-  - contributor_count helper uses stale_cutoff (14d) for active count.
-  - compute_daily_gfci returns the index even with 1 user so the
-    dashboard always has data during early testing/launch.
+CHANGES FROM v2.2:
+  FIX #9 (MEDIUM): N+1 query eliminated. Users are now batch-fetched
+    in a single query instead of one query per snapshot.
+  FIX: get_active_contributor_count uses the stale window consistently.
 """
 
 from datetime import datetime, timezone, timedelta, date as date_type
@@ -33,9 +26,8 @@ from app.models import User
 INDEX_EMA_ALPHA: float = 0.10
 
 # Credibility tiers (labels only — no longer blocks computation)
-MIN_USERS_FOR_PUBLISHED: int = 200     # "published" tier
-MIN_USERS_FOR_BETA: int = 50           # "beta" tier
-# Below 50 = "preview" tier — still computes, just labeled accordingly
+MIN_USERS_FOR_PUBLISHED: int = 200
+MIN_USERS_FOR_BETA: int = 50
 
 CONFIDENCE_FULL_WEIGHT: float = 50.0
 CONFIDENCE_REDUCED_WEIGHT: float = 0.3
@@ -106,11 +98,6 @@ def _compute_distribution(scores):
 # ══════════════════════════════════════════
 
 def get_active_contributor_count(db: Session) -> int:
-    """
-    Count distinct users who have submitted at least one check-in
-    within the STALE_USER_DAYS window (14 days). This is the real
-    'active contributors' number — not all-time.
-    """
     from app.models.checkin import CheckInResponse
 
     stale_cutoff = datetime.now(timezone.utc) - timedelta(days=STALE_USER_DAYS)
@@ -160,7 +147,15 @@ def compute_daily_gfci(db, segment="national"):
     if not snapshots:
         return None
 
-    # Build weighted scores
+    # FIX #9: Batch-fetch all users in one query instead of N+1
+    user_ids = [snap.user_id for snap in snapshots if snap.fcs_composite is not None]
+    if not user_ids:
+        return None
+
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+    user_map = {u.id: u for u in users}
+
+    # Build weighted scores using the pre-fetched user map
     weighted_scores = []
     raw_scores = []
     total_weight = 0.0
@@ -168,7 +163,7 @@ def compute_daily_gfci(db, segment="national"):
     for snap in snapshots:
         if snap.fcs_composite is None:
             continue
-        user = db.query(User).filter(User.id == snap.user_id).first()
+        user = user_map.get(snap.user_id)
         if not user:
             continue
         weight = _compute_user_weight(snap, user)
@@ -263,7 +258,6 @@ def compute_daily_gfci(db, segment="national"):
     )
 
     if existing:
-        # Update in place — no duplicate rows
         existing.fcs_value = raw_gfci
         existing.gf_rwi_composite = smoothed
         existing.user_count = user_count
@@ -333,7 +327,6 @@ def get_gfci_history(db, segment="national", days=30):
 
 
 def get_index_confidence_tier(user_count: int) -> str:
-    """Return the credibility tier label for the current index."""
     if user_count >= MIN_USERS_FOR_PUBLISHED:
         return "published"
     elif user_count >= MIN_USERS_FOR_BETA:

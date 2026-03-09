@@ -1,13 +1,14 @@
 /**
- * IndexPage — v5.2
- * ADDED: Live polling every 30 seconds — all users see real-time index updates
- * ADDED: Live indicator dot + pulse animation on value change
- * ADDED: "Last updated X seconds ago" live counter
+ * IndexPage — v5.3
+ * FIX: Uses shared apiFetch from src/api/api.js instead of inline copy.
+ *      Gets global 401 handling for free.
+ * All other logic unchanged from v5.2.
  */
 
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
+import { apiFetch } from "../api/api"
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   ReferenceLine,
@@ -19,30 +20,7 @@ var C = {
   green: "#10b981",
 }
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
-var POLL_INTERVAL = 30000 // 30 seconds
-
-var API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:8000'
-  : 'https://gracefinance-production.up.railway.app'
-
-function apiFetch(endpoint, options) {
-  var token = localStorage.getItem("grace_token")
-  var headers = { "Content-Type": "application/json" }
-  if (token) headers["Authorization"] = "Bearer " + token
-  var config = { headers: headers }
-  if (options) {
-    for (var k in options) {
-      if (k === "headers") {
-        for (var h in options.headers) headers[h] = options.headers[h]
-      } else { config[k] = options[k] }
-    }
-  }
-  config.headers = headers
-  return fetch(API_BASE + endpoint, config).then(function (res) {
-    if (!res.ok) throw new Error("Failed: " + endpoint)
-    return res.json()
-  })
-}
+var POLL_INTERVAL = 30000
 
 function Card(props) {
   return (<div style={{ background: C.card, border: "1px solid " + C.border, borderRadius: 12, padding: 24, ...(props.style || {}) }}>{props.children}</div>)
@@ -101,7 +79,6 @@ function LiveIndicator(props) {
 }
 
 function ValueFlash(props) {
-  // Briefly flash when value changes
   var value = props.value
   var flashState = useState(false); var flash = flashState[0]; var setFlash = flashState[1]
   var prevRef = useRef(value)
@@ -176,13 +153,11 @@ export default function IndexPage() {
   var methodologyState = useState(null); var methodology = methodologyState[0]; var setMethodology = methodologyState[1]
   var showMethodState = useState(false); var showMethod = showMethodState[0]; var setShowMethod = showMethodState[1]
 
-  // Live polling state
   var lastFetchState = useState(null); var lastFetch = lastFetchState[0]; var setLastFetch = lastFetchState[1]
   var secondsAgoState = useState(null); var secondsAgo = secondsAgoState[0]; var setSecondsAgo = secondsAgoState[1]
 
   useEffect(function () { setMounted(true); loadData() }, [])
 
-  // ── Live polling: refresh index every 30 seconds ──
   useEffect(function () {
     var pollTimer = setInterval(function () {
       apiFetch("/index/latest").then(function (data) {
@@ -193,7 +168,6 @@ export default function IndexPage() {
     return function () { clearInterval(pollTimer) }
   }, [])
 
-  // ── "X seconds ago" counter ──
   useEffect(function () {
     var tickTimer = setInterval(function () {
       if (lastFetch) {
@@ -279,7 +253,6 @@ export default function IndexPage() {
         <p style={{ fontSize: 12, color: C.dim, margin: "0 0 20px", letterSpacing: "0.02em" }}>The GraceFinance Composite Index</p>
         <Nav navigate={navigate} active="index" />
 
-        {/* HERO */}
         <Card style={{ marginBottom: 16, padding: "36px 28px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -341,7 +314,6 @@ export default function IndexPage() {
           </div>
         </Card>
 
-        {/* CONFIDENCE TIER EXPLANATION */}
         {hasData && userCount < 200 && (
           <Card style={{ marginBottom: 16, padding: "14px 20px" }}>
             <div style={{ fontSize: 11, fontWeight: 500, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Index Confidence</div>
@@ -354,7 +326,6 @@ export default function IndexPage() {
           </Card>
         )}
 
-        {/* TREND CHART */}
         {chartData.length > 1 ? (
           <Card style={{ marginBottom: 16, padding: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -400,7 +371,6 @@ export default function IndexPage() {
           </Card>
         )}
 
-        {/* WHAT IS THE COMPOSITE INDEX */}
         <Card style={{ marginBottom: 16 }}>
           <Label>What is the Composite Index?</Label>
           <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.8, margin: "16px 0 0" }}>
@@ -411,7 +381,6 @@ export default function IndexPage() {
           </p>
         </Card>
 
-        {/* METHODOLOGY */}
         <Card style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={loadMethodology}>
             <Label>Methodology</Label>
@@ -448,7 +417,6 @@ export default function IndexPage() {
           )}
         </Card>
 
-        {/* PRIVACY */}
         <Card style={{ marginBottom: 16, padding: "16px 20px" }}>
           <div style={{ fontSize: 11, fontWeight: 500, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Privacy and Data</div>
           <p style={{ fontSize: 12, color: C.faint, lineHeight: 1.7, margin: 0 }}>

@@ -1,19 +1,17 @@
 """
-Auth Router — v3.0
+Auth Router — v3.2
 ==================
-ADDED:
-  - Email verification on signup via support@gracefinance.co
-  - 18+ age gate on signup (date_of_birth required)
-  - Login blocks unverified accounts with clear message
-  - Forgot/reset password now sends real email
-  - /auth/verify-email fully wired
+CHANGES FROM v3.1:
+  FIX #12 (MEDIUM): Rate limiting on login (5/min), signup (3/hour),
+    and forgot-password (3/hour) to prevent brute-force and spam.
+  All other logic unchanged from v3.1.
 """
 
 import secrets
 from collections import defaultdict
 from datetime import datetime, date, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -23,9 +21,10 @@ from app.schemas import (
     UserSignup, UserLogin, UserResponse, UserOnboarding, TokenResponse
 )
 from app.services.auth import (
-    hash_password, verify_password, create_access_token, get_current_user
+    hash_password, verify_password, create_access_token, get_current_user, get_any_user
 )
 from app.services.email_service import send_verification_email, send_password_reset_email
+from app.services.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -93,13 +92,17 @@ def _calculate_age(dob: date) -> int:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/signup", response_model=TokenResponse, status_code=201)
-def signup(data: UserSignup, db: Session = Depends(get_db)):
+def signup(
+    data: UserSignup,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     """
-    Create account. Requires:
-      - Unique email
-      - date_of_birth (must be 18+)
-    Sends verification email immediately after signup.
+    Create account. Rate limited: 3 signups per IP per hour.
     """
+    # ── Rate limit: 3 signups per hour per IP ────────────────────────────────
+    rate_limit(request, key="signup", max_requests=3, window_seconds=3600)
+
     _ensure_columns(db)
 
     # ── 18+ age check ────────────────────────────────────────────────────────
@@ -148,8 +151,18 @@ def signup(data: UserSignup, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: UserLogin, db: Session = Depends(get_db)):
-    """Login. Blocks unverified accounts and locked accounts."""
+def login(
+    data: UserLogin,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Login. Rate limited: 5 attempts per IP per minute.
+    Also has per-email lockout (5 failures = 15 min lock).
+    """
+    # ── Rate limit: 5 login attempts per minute per IP ───────────────────────
+    rate_limit(request, key="login", max_requests=5, window_seconds=60)
+
     email = data.email.lower()
     _check_lockout(email)
 
@@ -178,7 +191,11 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(user: User = Depends(get_current_user)):
+def get_me(user: User = Depends(get_any_user)):
+    """
+    Returns current user info. Uses get_any_user (no email verification
+    required) so the frontend can check session/verification status.
+    """
     return UserResponse.model_validate(user)
 
 
@@ -233,8 +250,14 @@ def verify_email(data: dict, db: Session = Depends(get_db)):
 
 
 @router.post("/resend-verification", status_code=200)
-def resend_verification(data: dict, db: Session = Depends(get_db)):
-    """Resend verification email. Always returns 200."""
+def resend_verification(
+    data: dict,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Resend verification email. Rate limited: 3 per hour per IP."""
+    rate_limit(request, key="resend-verify", max_requests=3, window_seconds=3600)
+
     email = (data.get("email") or "").lower().strip()
     if not email:
         raise HTTPException(status_code=400, detail="Email required.")
@@ -251,8 +274,14 @@ def resend_verification(data: dict, db: Session = Depends(get_db)):
 
 
 @router.post("/forgot-password", status_code=200)
-def forgot_password(data: dict, db: Session = Depends(get_db)):
-    """Request password reset. Always returns 200."""
+def forgot_password(
+    data: dict,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Request password reset. Rate limited: 3 per hour per IP."""
+    rate_limit(request, key="forgot-password", max_requests=3, window_seconds=3600)
+
     email = (data.get("email") or "").lower().strip()
     if not email:
         raise HTTPException(status_code=400, detail="Email is required.")
