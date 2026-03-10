@@ -246,7 +246,7 @@ export default function GraceChat() {
               <span style={{ fontSize: 14, fontWeight: 600, color: C.text, letterSpacing: '-0.02em' }}>Grace</span>
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: C.text }} />
             </div>
-            <p style={{ fontSize: 11, color: C.dim, margin: '2px 0 0', letterSpacing: '0.02em' }}>AI Financial Coach</p>
+            <p style={{ fontSize: 11, color: C.dim, margin: '2px 0 0', letterSpacing: '0.02em' }}>Your Personal Insight Engine</p>
           </div>
         </div>
         {/* Usage pill in header */}
