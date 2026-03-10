@@ -124,9 +124,12 @@ def check_ai_usage(db: Session, user) -> dict:
 
 
 def increment_ai_usage(db: Session, user):
-    current = getattr(user, "ai_messages_used", 0) or 0
-    user.ai_messages_used = current + 1
-    db.commit()
+    try:
+        current = getattr(user, "ai_messages_used", 0) or 0
+        user.ai_messages_used = current + 1
+        db.commit()
+    except Exception:
+        db.rollback()
 
 
 GRACE_SYSTEM_PROMPT = """You are Grace, the GraceFinance behavioral insight engine.
@@ -378,7 +381,7 @@ def _build_user_context(db: Session, user_id) -> str:
                 context_parts.append(f"Risk tolerance: {RISK_STYLE_LABELS[risk_style]}")
 
     except Exception:
-        pass
+        db.rollback()
 
     try:
         from app.models.checkin import UserMetricSnapshot
@@ -477,7 +480,7 @@ def _build_user_context(db: Session, user_id) -> str:
                 )
 
     except Exception:
-        pass
+        db.rollback()
 
     if context_parts:
         return "\n\nLIVE USER CONTEXT (use naturally in conversation):\n" + "\n".join(context_parts)
