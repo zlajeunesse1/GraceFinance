@@ -2,6 +2,9 @@
 GraceFinance - UserProfile Model
 Separate from auth credentials. 1:1 with User.
 Designed for scale: JSONB preferences, audit logging, institutional flags ready.
+
+v6: Added financial snapshot fields (income, expenses, debt, goals, mission)
+    so users can update from Profile page post-onboarding.
 """
 
 import uuid
@@ -15,7 +18,9 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
+    Numeric,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -62,6 +67,19 @@ class UserProfile(Base):
     timezone = Column(String(64), nullable=False, default="America/New_York")
     currency = Column(String(8), nullable=False, default="USD")
 
+    # ── Financial Snapshot (editable from Profile page) ──────────────────────
+    # These mirror the onboarding fields but live here so users can update them.
+    # Grace AI reads from profile first, falls back to User model fields.
+    income = Column(Numeric(12, 2), nullable=True)
+    expenses = Column(Numeric(12, 2), nullable=True)
+    debt = Column(Numeric(12, 2), nullable=True)
+
+    # ── Goals & Mission ──────────────────────────────────────────────────────
+    # goals: JSON array of goal IDs e.g. ["save", "debt", "wealth"]
+    goals = Column(JSONB, nullable=True)
+    # mission: free-text personal financial mission statement
+    mission = Column(Text, nullable=True)
+
     # ── Grace Platform Settings ───────────────────────────────────────────────
     onboarding_completed = Column(Boolean, nullable=False, default=False)
     theme = Column(
@@ -76,18 +94,10 @@ class UserProfile(Base):
     )
 
     # ── Scalability Fields (future-ready) ────────────────────────────────────
-    # Add Grace Intelligence institutional flags here when needed
     preferences = Column(JSONB, nullable=True, default=dict)
-    # e.g. {"notifications": true, "weekly_digest": false}
-
     subscription_tier = Column(String(32), nullable=True)
-    # e.g. "free", "premium", "institutional"
-
     feature_flags = Column(JSONB, nullable=True, default=dict)
-    # e.g. {"grace_intelligence": false, "b2b_api": false}
-
     profile_completion_score = Column(Integer, nullable=False, default=0)
-    # 0-100, computed on save
 
     # ── Audit / Activity ─────────────────────────────────────────────────────
     last_active = Column(DateTime(timezone=True), nullable=True)
@@ -115,7 +125,7 @@ class UserProfile(Base):
     def compute_completion_score(self) -> int:
         """
         Returns 0-100 score based on filled fields.
-        Extend this as profile fields grow.
+        v6: includes financial snapshot + goals + mission.
         """
         fields = {
             "display_name": self.display_name,
@@ -124,6 +134,19 @@ class UserProfile(Base):
             "onboarding_completed": self.onboarding_completed,
             "risk_style": self.risk_style,
             "theme": self.theme,
+            "income": self.income,
+            "expenses": self.expenses,
+            "debt": self.debt,
+            "goals": self.goals,
+            "mission": self.mission,
         }
-        filled = sum(1 for v in fields.values() if v is not None and v is not False)
+        filled = 0
+        for v in fields.values():
+            if v is None or v is False:
+                continue
+            if isinstance(v, (list, dict)) and len(v) == 0:
+                continue
+            if isinstance(v, str) and v.strip() == "":
+                continue
+            filled += 1
         return round((filled / len(fields)) * 100)

@@ -1,11 +1,11 @@
 """
-GraceFinance — Grace AI Coach Service (v3.4)
+GraceFinance — Grace AI Coach Service (v3.5)
 ==============================================
-CHANGES FROM v3.3:
-  - FIX: API key now loaded from config.get_settings() instead of os.getenv()
-  - FIX: Usage reset uses Eastern Time instead of server-local date.today()
-  - FIX: Basic prompt injection filtering on user messages
-  - FIX: HTML-escape user name in context to prevent injection
+CHANGES FROM v3.4:
+  - Grace now reads financial snapshot from UserProfile (income, expenses, debt,
+    goals, mission) with fallback to User model fields from onboarding.
+  - Added risk tolerance and mission context for deeper personalization.
+  - Profile fields take priority over User model fields (user can update anytime).
 """
 
 import os
@@ -39,9 +39,6 @@ from app.services.tier_config import AI_MESSAGE_LIMITS as AI_USAGE_LIMITS
 
 
 # ── Prompt injection patterns ────────────────────────────────────────────────
-# These patterns indicate attempts to override Grace's system prompt.
-# We don't block the message entirely — we strip the injection attempt
-# and let the conversation continue naturally.
 INJECTION_PATTERNS = [
     r"ignore\s+(all\s+)?(previous|prior|above|your)\s+(instructions|rules|prompt|guardrails)",
     r"forget\s+(all\s+)?(previous|prior|your)\s+(instructions|rules)",
@@ -66,17 +63,11 @@ _injection_regex = re.compile(
 
 
 def _sanitize_messages(messages: list[dict]) -> list[dict]:
-    """
-    Scan user messages for prompt injection attempts.
-    Replaces matched content with a neutral redirect.
-    Does NOT block the message — keeps the conversation flowing.
-    """
     sanitized = []
     for msg in messages:
         if msg.get("role") == "user":
             content = msg.get("content", "")
             if _injection_regex.search(content):
-                # Replace the injection attempt, keep the rest
                 cleaned = _injection_regex.sub("[redirect]", content).strip()
                 if not cleaned or cleaned == "[redirect]":
                     cleaned = "I'd like to talk about my finances."
@@ -89,7 +80,6 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
 
 
 def _html_escape(text: str) -> str:
-    """Escape HTML special characters to prevent injection in context."""
     return (text
         .replace("&", "&amp;")
         .replace("<", "&lt;")
@@ -99,17 +89,10 @@ def _html_escape(text: str) -> str:
 
 
 def check_ai_usage(db: Session, user) -> dict:
-    """
-    Check whether the user has remaining AI messages this month.
-    Resets the counter if we're in a new calendar month (Eastern Time).
-    Returns usage info dict. Raises HTTPException 429 if limit exceeded.
-    """
-    # FIX: Use Eastern Time for month boundary, matching the rest of the platform
     today_et = datetime.now(EASTERN).date()
     tier = str(getattr(user, "subscription_tier", "free") or "free").lower()
     limit = AI_USAGE_LIMITS.get(tier)
 
-    # Reset counter if it's a new month
     reset_date = getattr(user, "ai_reset_date", None)
     if reset_date is None or (hasattr(reset_date, 'month') and (
         reset_date.month != today_et.month or reset_date.year != today_et.year
@@ -141,7 +124,6 @@ def check_ai_usage(db: Session, user) -> dict:
 
 
 def increment_ai_usage(db: Session, user):
-    """Increment the user's AI message counter after a successful response."""
     current = getattr(user, "ai_messages_used", 0) or 0
     user.ai_messages_used = current + 1
     db.commit()
@@ -218,6 +200,7 @@ WHAT YOU CAN DO:
 - Explore psychology behind spending patterns
 - Provide general financial education
 - Reference their specific data naturally when available
+- Reference their personal mission and goals to keep coaching focused
 
 STRICT GUARDRAILS:
 1. NEVER recommend specific investments, stocks, bonds, crypto, or securities
@@ -264,6 +247,12 @@ ONBOARDING_GOAL_LABELS = {
     "habits": "Change Financial Behavior",
 }
 
+RISK_STYLE_LABELS = {
+    "calm": "Conservative (prioritizes safety and stability)",
+    "balanced": "Balanced (steady growth with managed risk)",
+    "aggressive": "Growth-oriented (maximizing long-term upside)",
+}
+
 
 def _score_band(score: float) -> str:
     if score >= 80: return "Thriving"
@@ -275,15 +264,23 @@ def _score_band(score: float) -> str:
 
 
 def _build_user_context(db: Session, user_id) -> str:
+    """
+    Build live user context for Grace AI.
+    v3.5: Reads from UserProfile first (income, expenses, debt, goals, mission,
+    risk_style) with fallback to User model fields from onboarding.
+    """
     context_parts = []
 
     try:
         from app.models import User
+        from app.models.profile import UserProfile
+
         user = db.query(User).filter(User.id == user_id).first()
+        profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+
         if user:
             name = getattr(user, "first_name", None)
             if name:
-                # HTML-escape to prevent injection via user name
                 context_parts.append(f"User's name: {_html_escape(name)}")
 
             streak = getattr(user, "current_streak", 0) or 0
@@ -298,13 +295,27 @@ def _build_user_context(db: Session, user_id) -> str:
                 remaining = max(0, limit - used)
                 context_parts.append(f"AI usage this month: {used}/{limit} messages ({remaining} remaining)")
 
-            income = getattr(user, "monthly_income", None)
-            expenses = getattr(user, "monthly_expenses", None)
-            goal_text = getattr(user, "financial_goal", None)
-            onboarding_goals = getattr(user, "onboarding_goals", None)
+            # ── Financial Snapshot ────────────────────────────────────────
+            # Profile fields take priority (user can update anytime).
+            # Fall back to User model fields from onboarding.
+            income_raw = None
+            expenses_raw = None
+            debt_raw = None
 
-            income_f = float(income) if income is not None else 0.0
-            expenses_f = float(expenses) if expenses is not None else 0.0
+            if profile:
+                income_raw = getattr(profile, "income", None)
+                expenses_raw = getattr(profile, "expenses", None)
+                debt_raw = getattr(profile, "debt", None)
+
+            # Fallback to User model (onboarding values)
+            if income_raw is None:
+                income_raw = getattr(user, "monthly_income", None)
+            if expenses_raw is None:
+                expenses_raw = getattr(user, "monthly_expenses", None)
+
+            income_f = float(income_raw) if income_raw is not None else 0.0
+            expenses_f = float(expenses_raw) if expenses_raw is not None else 0.0
+            debt_f = float(debt_raw) if debt_raw is not None else 0.0
 
             if income_f > 0:
                 context_parts.append(f"Monthly take-home income: ${income_f:,.0f}")
@@ -317,14 +328,44 @@ def _build_user_context(db: Session, user_id) -> str:
                     context_parts.append(f"Monthly available after expenses: ${available:,.0f} ({savings_rate:.0f}% savings rate)")
                 else:
                     context_parts.append(f"Monthly shortfall: ${abs(available):,.0f} (expenses exceed income by {abs(savings_rate):.0f}%)")
+            if debt_f > 0:
+                context_parts.append(f"Total debt: ${debt_f:,.0f}")
+                if income_f > 0:
+                    dti = (debt_f / (income_f * 12)) * 100
+                    context_parts.append(f"Debt-to-annual-income ratio: {dti:.0f}%")
+            elif debt_f == 0 and debt_raw is not None:
+                context_parts.append("Total debt: $0 (debt-free)")
 
-            if goal_text and goal_text.strip():
-                # Escape user-provided goal text
-                context_parts.append(f"User's personal financial goal: \"{_html_escape(goal_text.strip())}\"")
+            # ── Goals (profile first, then onboarding) ───────────────────
+            goals_list = None
+            if profile and getattr(profile, "goals", None):
+                goals_list = profile.goals
+            if not goals_list:
+                goals_list = getattr(user, "onboarding_goals", None)
 
-            if onboarding_goals and isinstance(onboarding_goals, list) and len(onboarding_goals) > 0:
-                readable = [ONBOARDING_GOAL_LABELS.get(g, g) for g in onboarding_goals]
+            if goals_list and isinstance(goals_list, list) and len(goals_list) > 0:
+                readable = [ONBOARDING_GOAL_LABELS.get(g, g) for g in goals_list]
                 context_parts.append(f"What they came here to work on: {', '.join(readable)}")
+
+            # ── Mission ──────────────────────────────────────────────────
+            mission_text = None
+            if profile and getattr(profile, "mission", None):
+                mission_text = profile.mission
+            if not mission_text:
+                mission_text = getattr(user, "financial_goal", None)
+
+            if mission_text and str(mission_text).strip():
+                context_parts.append(f"User's personal financial mission: \"{_html_escape(str(mission_text).strip())}\"")
+
+            # ── Risk Tolerance ───────────────────────────────────────────
+            risk_style = None
+            if profile:
+                risk_style = getattr(profile, "risk_style", None)
+                if risk_style:
+                    risk_style = str(risk_style).replace("RiskStyle.", "").lower()
+
+            if risk_style and risk_style in RISK_STYLE_LABELS:
+                context_parts.append(f"Risk tolerance: {RISK_STYLE_LABELS[risk_style]}")
 
     except Exception:
         pass
@@ -439,21 +480,17 @@ def chat_with_grace(db: Session, user, messages: list[dict]) -> dict:
     Now accepts user object directly for usage tracking.
     Returns dict with response text and usage info.
     """
-    # ── Usage check BEFORE calling Claude ───────────────────────────────────
     usage = check_ai_usage(db, user)
 
-    # ── Get API key from config (not os.getenv) ─────────────────────────────
     settings = get_settings()
     api_key = settings.anthropic_api_key
     if not api_key:
-        # Fallback to env var for backward compatibility
         api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY not set.")
 
     user_id = user.id
 
-    # ── Sanitize user messages for prompt injection ─────────────────────────
     messages = _sanitize_messages(messages)
 
     user_context = ""
@@ -488,7 +525,6 @@ def chat_with_grace(db: Session, user, messages: list[dict]) -> dict:
 
     response_text = response.content[0].text
 
-    # ── Increment usage AFTER successful response ────────────────────────────
     increment_ai_usage(db, user)
 
     if HAS_ENGINE:
@@ -500,7 +536,6 @@ def chat_with_grace(db: Session, user, messages: list[dict]) -> dict:
         except Exception:
             pass
 
-    # Return updated usage for frontend
     new_used = getattr(user, "ai_messages_used", 0) or 0
     limit = usage["limit"]
     return {
@@ -521,10 +556,17 @@ def get_grace_intro(db: Session, user_id) -> dict:
 
     try:
         from app.models import User
+        from app.models.profile import UserProfile
+
         user = db.query(User).filter(User.id == user_id).first()
+        profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
         if user:
             user_name = getattr(user, "first_name", None)
-            onboarding_goals = getattr(user, "onboarding_goals", None)
+            # Profile goals take priority
+            if profile and getattr(profile, "goals", None):
+                onboarding_goals = profile.goals
+            if not onboarding_goals:
+                onboarding_goals = getattr(user, "onboarding_goals", None)
     except Exception:
         pass
 

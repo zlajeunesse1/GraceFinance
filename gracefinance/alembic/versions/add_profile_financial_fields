@@ -1,0 +1,37 @@
+"""add financial snapshot fields to user_profiles
+
+Revision ID: d356e648897b
+Revises: <INSERT_PREVIOUS_REVISION_HERE>
+Create Date: 2026-03-10
+
+Adds income, expenses, debt (Numeric), goals (JSONB), mission (Text)
+to user_profiles table so users can update their financial picture
+from the Profile page post-onboarding.
+"""
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
+
+
+# revision identifiers
+revision = 'a1b2c3d4e5f6'
+down_revision = None  # ← Replace with your latest revision ID
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.add_column('user_profiles', sa.Column('income', sa.Numeric(12, 2), nullable=True))
+    op.add_column('user_profiles', sa.Column('expenses', sa.Numeric(12, 2), nullable=True))
+    op.add_column('user_profiles', sa.Column('debt', sa.Numeric(12, 2), nullable=True))
+    op.add_column('user_profiles', sa.Column('goals', JSONB(), nullable=True))
+    op.add_column('user_profiles', sa.Column('mission', sa.Text(), nullable=True))
+
+
+def downgrade() -> None:
+    op.drop_column('user_profiles', 'mission')
+    op.drop_column('user_profiles', 'goals')
+    op.drop_column('user_profiles', 'debt')
+    op.drop_column('user_profiles', 'expenses')
+    op.drop_column('user_profiles', 'income')
