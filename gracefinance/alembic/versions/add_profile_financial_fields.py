@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers
 revision = 'a1b2c3d4e5f6'
-down_revision = None  # ← Replace with your latest revision ID
+down_revision = '002_daily_index_trend_columns'
 branch_labels = None
 depends_on = None
 
