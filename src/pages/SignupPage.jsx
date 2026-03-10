@@ -38,7 +38,16 @@ function LegalModal(props) {
         return res.text()
       })
       .then(function (html) {
-        setContent(html)
+        // The backend returns a full HTML page. Extract just the body content
+        // so it renders properly inside our dark-themed modal.
+        var bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)
+        var extracted = bodyMatch ? bodyMatch[1] : html
+        // Strip any <header> nav and <footer> — we have our own modal chrome
+        extracted = extracted.replace(/<header[\s\S]*?<\/header>/gi, '')
+        extracted = extracted.replace(/<footer[\s\S]*?<\/footer>/gi, '')
+        // Strip any <link> stylesheet references that won't resolve in modal
+        extracted = extracted.replace(/<link[^>]*>/gi, '')
+        setContent(extracted.trim())
         setIsLoading(false)
       })
       .catch(function () {
@@ -48,19 +57,23 @@ function LegalModal(props) {
   }, [type])
 
   var contentStyles = "\
-    .legal-content { color: #ccc; font-size: 13px; line-height: 1.8; font-family: " + FONT + "; }\
-    .legal-content h1 { color: #fff; font-size: 18px; font-weight: 600; margin: 0 0 16px; }\
-    .legal-content h2 { color: #fff; font-size: 15px; font-weight: 600; margin: 24px 0 10px; }\
-    .legal-content h3 { color: #fff; font-size: 14px; font-weight: 600; margin: 20px 0 8px; }\
-    .legal-content p { color: #ccc; margin: 0 0 12px; }\
-    .legal-content ul, .legal-content ol { color: #aaa; padding-left: 20px; margin: 0 0 12px; }\
-    .legal-content li { margin-bottom: 6px; font-size: 12px; line-height: 1.7; }\
-    .legal-content a { color: #60a5fa; text-decoration: underline; }\
-    .legal-content strong { color: #fff; }\
+    .legal-content, .legal-content * { color: #ccc !important; background: transparent !important; font-family: " + FONT + " !important; }\
+    .legal-content { font-size: 13px; line-height: 1.8; }\
+    .legal-content h1 { color: #fff !important; font-size: 18px !important; font-weight: 600; margin: 0 0 16px; }\
+    .legal-content h2 { color: #fff !important; font-size: 15px !important; font-weight: 600; margin: 24px 0 10px; }\
+    .legal-content h3 { color: #fff !important; font-size: 14px !important; font-weight: 600; margin: 20px 0 8px; }\
+    .legal-content p { color: #ccc !important; margin: 0 0 12px; font-size: 13px; line-height: 1.8; }\
+    .legal-content ul, .legal-content ol { color: #aaa !important; padding-left: 20px; margin: 0 0 12px; }\
+    .legal-content li { margin-bottom: 6px; font-size: 12px; line-height: 1.7; color: #aaa !important; }\
+    .legal-content a { color: #60a5fa !important; text-decoration: underline; }\
+    .legal-content strong, .legal-content b { color: #fff !important; }\
+    .legal-content section { padding: 0 !important; margin: 0 !important; border: none !important; }\
+    .legal-content .legal-hero, .legal-content .legal-hero-inner { padding: 0 !important; margin: 0 0 16px !important; }\
+    .legal-content .effective-date { color: #666 !important; font-size: 12px !important; }\
     .legal-content table { border-collapse: collapse; width: 100%; margin: 12px 0; }\
-    .legal-content th, .legal-content td { border: 1px solid #333; padding: 8px 12px; font-size: 12px; text-align: left; }\
-    .legal-content th { background: #111; color: #fff; }\
-    .legal-content td { color: #ccc; }\
+    .legal-content th, .legal-content td { border: 1px solid #333 !important; padding: 8px 12px; font-size: 12px; text-align: left; }\
+    .legal-content th { background: #111 !important; color: #fff !important; }\
+    .legal-content td { color: #ccc !important; }\
   "
 
   function renderContent() {
