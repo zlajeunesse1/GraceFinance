@@ -1,7 +1,14 @@
 /**
- * ProfilePage — v6 Behavioral Mirror
+ * ProfilePage — v6.1 Behavioral Mirror
  * Full reflection of onboarding data. Editable financial snapshot.
  * No dead buttons. This is the user's behavioral safe haven.
+ *
+ * CHANGES FROM v6:
+ *   - FIX: handleSave now checks saveError before showing "Saved"
+ *   - FIX: Removed localStorage fallback (profile DB is single source of truth)
+ *   - FIX: Added hasLoaded ref so useEffect only initializes form state once
+ *          (prevents re-clobbering local edits on optimistic update cycles)
+ *   - Grace AI now reliably reflects updated profile data
  */
 
 import { useState, useEffect, useRef } from "react"
@@ -67,18 +74,23 @@ export default function ProfilePage() {
   var currencyState = useState("USD"); var currency = currencyState[0]; var setCurrency = currencyState[1]
   var riskState = useState("balanced"); var riskStyle = riskState[0]; var setRiskStyle = riskState[1]
 
-  /* Financial Snapshot — mirrors onboarding */
+  /* Financial Snapshot */
   var incomeState = useState(""); var income = incomeState[0]; var setIncome = incomeState[1]
   var expensesState = useState(""); var expenses = expensesState[0]; var setExpenses = expensesState[1]
   var debtState = useState(""); var debt = debtState[0]; var setDebt = debtState[1]
 
-  /* Goals & Mission — mirrors onboarding */
+  /* Goals & Mission */
   var goalsState = useState([]); var selectedGoals = goalsState[0]; var setSelectedGoals = goalsState[1]
   var missionState = useState(""); var mission = missionState[0]; var setMission = missionState[1]
 
   /* UI state */
   var savedState = useState(false); var saved = savedState[0]; var setSaved = savedState[1]
   var focusedState = useState(null); var focused = focusedState[0]; var setFocused = focusedState[1]
+
+  /* FIX: Only initialize form state once from the server profile.
+     Without this guard, the useEffect re-runs on every optimistic update
+     and server response, which can clobber in-progress edits. */
+  var hasLoaded = useRef(false)
 
   var currentTier = (user && user.subscription_tier ? user.subscription_tier : "free").toLowerCase()
   var isPremium = currentTier === "premium"
@@ -90,32 +102,22 @@ export default function ProfilePage() {
   var available = incomeVal - expensesVal
   var savingsRate = incomeVal > 0 ? ((available / incomeVal) * 100).toFixed(0) : 0
 
+  /* FIX: Initialize form state from profile ONCE on first load only.
+     Removed localStorage fallback -- profile DB is the single source of truth.
+     If profile fields are null, they stay empty. The user can fill them in
+     and save, which persists to the DB and feeds Grace AI. */
   useEffect(function () {
-    if (profile) {
+    if (profile && !hasLoaded.current) {
+      hasLoaded.current = true
       setDisplayName(profile.display_name || "")
       setTimezone(profile.timezone || "America/New_York")
       setCurrency(profile.currency || "USD")
       setRiskStyle(profile.risk_style || "balanced")
-      /* Load financial fields from profile if available */
       if (profile.income !== undefined && profile.income !== null) setIncome(profile.income)
       if (profile.expenses !== undefined && profile.expenses !== null) setExpenses(profile.expenses)
       if (profile.debt !== undefined && profile.debt !== null) setDebt(profile.debt)
       if (profile.goals && Array.isArray(profile.goals)) setSelectedGoals(profile.goals)
       if (profile.mission) setMission(profile.mission)
-    }
-    /* Fallback: load from onboarding localStorage if profile fields are empty */
-    if (profile && !profile.income && !profile.expenses) {
-      try {
-        var raw = localStorage.getItem("grace-onboarding-data")
-        if (raw) {
-          var data = JSON.parse(raw)
-          if (data.income && !profile.income) setIncome(data.income)
-          if (data.expenses && !profile.expenses) setExpenses(data.expenses)
-          if (data.debt !== undefined && !profile.debt) setDebt(data.debt)
-          if (data.goals && data.goals.length > 0 && (!profile.goals || profile.goals.length === 0)) setSelectedGoals(data.goals)
-          if (data.mission && !profile.mission) setMission(data.mission)
-        }
-      } catch (e) { /* ignore parse errors */ }
     }
   }, [profile])
 
@@ -127,8 +129,11 @@ export default function ProfilePage() {
     }
   }
 
+  /* FIX: handleSave now awaits the update, then checks saveError from the hook.
+     Only shows "Saved" on actual success. Also re-syncs form state from the
+     server response so the UI reflects exactly what the DB persisted. */
   async function handleSave() {
-    await updateProfile({
+    var result = await updateProfile({
       display_name: displayName || null,
       timezone: timezone,
       currency: currency,
@@ -139,8 +144,21 @@ export default function ProfilePage() {
       goals: selectedGoals,
       mission: mission || null,
     })
-    setSaved(true)
-    setTimeout(function () { setSaved(false) }, 2000)
+
+    /* updateProfile returns the server response on success, or null on failure.
+       The hook also sets saveError on failure. Check both. */
+    if (result && !profileHook.saveError) {
+      /* Re-sync form state from server response to confirm what actually persisted */
+      if (result.income !== undefined && result.income !== null) setIncome(result.income)
+      if (result.expenses !== undefined && result.expenses !== null) setExpenses(result.expenses)
+      if (result.debt !== undefined && result.debt !== null) setDebt(result.debt)
+      if (result.goals && Array.isArray(result.goals)) setSelectedGoals(result.goals)
+      if (result.mission) setMission(result.mission)
+
+      setSaved(true)
+      setTimeout(function () { setSaved(false) }, 2000)
+    }
+    /* If save failed, saveError is already set by the hook and renders below the button */
   }
 
   var inputStyle = function (field) {
@@ -284,12 +302,14 @@ export default function ProfilePage() {
 
         {/* ── Save ── */}
         <button onClick={handleSave} disabled={isSaving} style={{
-          width: "100%", padding: "14px", borderRadius: 8, border: "none", background: "#ffffff", color: "#000000",
+          width: "100%", padding: "14px", borderRadius: 8, border: "none",
+          background: saved ? "#16a34a" : "#ffffff",
+          color: saved ? "#ffffff" : "#000000",
           fontWeight: 600, fontSize: 14, fontFamily: FONT, cursor: isSaving ? "not-allowed" : "pointer",
           transition: "all 0.2s ease", opacity: isSaving ? 0.5 : 1, letterSpacing: "-0.01em", marginTop: 4,
         }}
-          onMouseEnter={function (e) { if (!isSaving) e.target.style.opacity = "0.85" }}
-          onMouseLeave={function (e) { if (!isSaving) e.target.style.opacity = "1" }}
+          onMouseEnter={function (e) { if (!isSaving && !saved) e.target.style.opacity = "0.85" }}
+          onMouseLeave={function (e) { if (!isSaving && !saved) e.target.style.opacity = "1" }}
         >{saved ? "Saved" : isSaving ? "Saving..." : "Save Profile"}</button>
         {saveError && (<p style={{ color: "#ff4444", fontSize: 13, textAlign: "center", marginTop: 10 }}>{saveError}</p>)}
       </div>

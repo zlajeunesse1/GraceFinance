@@ -1,43 +1,50 @@
 /**
- * GraceFinance - Profile API
+ * GraceFinance - Profile API (v6.1)
  * Matches your existing auth pattern:
  * - Token key: 'grace_token' (matches AuthContext)
  * - Base URL: auto-detects localhost vs production
  * - No user_id ever sent to backend
+ *
+ * CHANGES FROM v6:
+ *   - Convention: var declarations, function expressions (matches codebase)
  */
 
-const API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:8000'
-  : 'https://gracefinance-production.up.railway.app';
+var API_BASE = (function () {
+  var host = window.location.hostname
+  if (host === "localhost" || host === "127.0.0.1") return "http://localhost:8000"
+  return "https://gracefinance-production.up.railway.app"
+})()
 
 function getAuthHeaders() {
-  const token = localStorage.getItem('grace_token') // matches your AuthContext
-  if (!token) throw new Error('No session found. Please log in.')
+  var token = localStorage.getItem("grace_token")
+  if (!token) throw new Error("No session found. Please log in.")
   return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
+    "Content-Type": "application/json",
+    "Authorization": "Bearer " + token,
   }
 }
 
-async function handleResponse(res) {
+function handleResponse(res) {
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Unknown error' }))
-    throw new Error(error.detail || `Request failed: ${res.status}`)
+    return res.json()
+      .catch(function () { return { detail: "Unknown error" } })
+      .then(function (errBody) {
+        throw new Error(errBody.detail || "Request failed: " + res.status)
+      })
   }
   return res.json()
 }
 
-export const profileApi = {
+export var profileApi = {
   /**
    * GET /api/profile
-   * Auto-creates profile on first access — never 404 for valid users.
+   * Auto-creates profile on first access.
    */
-  async get() {
-    const res = await fetch(`${API_BASE}/api/profile`, {
-      method: 'GET',
+  get: function () {
+    return fetch(API_BASE + "/api/profile", {
+      method: "GET",
       headers: getAuthHeaders(),
-    })
-    return handleResponse(res)
+    }).then(handleResponse)
   },
 
   /**
@@ -45,16 +52,19 @@ export const profileApi = {
    * Partial update — only sends fields you pass in.
    * Never sends user_id.
    */
-  async update(payload) {
-    // Strip undefined so we only send what changed
-    const clean = Object.fromEntries(
-      Object.entries(payload).filter(([, v]) => v !== undefined)
-    )
-    const res = await fetch(`${API_BASE}/api/profile`, {
-      method: 'PATCH',
+  update: function (payload) {
+    /* Strip undefined so we only send what changed */
+    var clean = {}
+    var keys = Object.keys(payload)
+    for (var i = 0; i < keys.length; i++) {
+      if (payload[keys[i]] !== undefined) {
+        clean[keys[i]] = payload[keys[i]]
+      }
+    }
+    return fetch(API_BASE + "/api/profile", {
+      method: "PATCH",
       headers: getAuthHeaders(),
       body: JSON.stringify(clean),
-    })
-    return handleResponse(res)
+    }).then(handleResponse)
   },
 }
