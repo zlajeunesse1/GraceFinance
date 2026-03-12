@@ -9,6 +9,7 @@ API docs available at:
     http://localhost:8000/docs
 
 FIX #11 (MEDIUM): Scheduler jobs now log errors instead of silently swallowing them.
+FIX #12 (MEDIUM): Daily email scheduler now runs hourly to support per-user reminder times.
 """
 
 import logging
@@ -62,10 +63,9 @@ def scheduled_index_compute():
 
 
 def scheduled_daily_emails():
-    """Wrapper for daily engagement emails with its own DB session."""
+    """Wrapper for daily engagement emails — runs hourly, filters by user preference."""
     try:
         send_daily_engagement_emails()
-        logger.info("Daily engagement emails sent successfully")
     except Exception as e:
         logger.error(f"Daily engagement emails failed: {e}", exc_info=True)
 
@@ -93,11 +93,10 @@ app = FastAPI(
 # ── Scheduler — all times in UTC ─────────────────────────────────────────────
 scheduler = BackgroundScheduler()
 
-# Daily engagement emails — 8:00 AM EST (13:00 UTC)
+# Daily engagement emails — runs every hour, emails.py filters by user's preferred ET time
 scheduler.add_job(
     scheduled_daily_emails,
     "cron",
-    hour=13,
     minute=0,
     id="daily_engagement_email",
     replace_existing=True,

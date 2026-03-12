@@ -6,6 +6,8 @@ GET    /api/profile/preferences → fetch current preferences
 Stores in UserProfile.preferences (JSONB column — already exists, no migration).
 Handles: coaching_style, daily_reminder, reminder_time.
 
+v1.1: Added "unhinged" to valid coaching styles.
+
 Wire into main.py:
     from app.routers.preferences import router as preferences_router
     app.include_router(preferences_router)
@@ -29,7 +31,7 @@ router = APIRouter(prefix="/api/profile", tags=["Preferences"])
 
 # ── Schema ────────────────────────────────────────────────────────────────────
 
-VALID_COACHING_STYLES = {"encouraging", "direct", "balanced"}
+VALID_COACHING_STYLES = {"encouraging", "direct", "balanced", "unhinged"}
 VALID_REMINDER_TIMES = {
     "07:00", "08:00", "09:00", "10:00",
     "12:00", "13:00", "18:00", "20:00",
