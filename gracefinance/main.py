@@ -28,6 +28,7 @@ from app.routers import (
 )
 from app.routers.grace import router as grace_router
 from app.routers.profile import router as profile_router
+from app.routers.preferences import router as preferences_router
 from app.routers.legal_routes import router as legal_router
 from app.routers.export import router as export_router
 from app.routers import me_router
@@ -178,6 +179,9 @@ app.include_router(grace_router)
 # ── User Profile ──
 app.include_router(profile_router)
 
+# ── User Preferences ──
+app.include_router(preferences_router)
+
 # ── User Metrics ──
 app.include_router(me_router)
 
@@ -208,6 +212,7 @@ def root():
             "intro": "/grace/intro",
         },
         "profile": "/api/profile",
+        "preferences": "/api/profile/preferences",
         "feed": "/feed/",
         "export": {
             "checkins": "/api/export/checkins",

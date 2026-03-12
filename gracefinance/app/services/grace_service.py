@@ -1,11 +1,12 @@
 """
-GraceFinance — Grace AI Service (v3.6)
+GraceFinance — Grace AI Service (v3.7)
 ==============================================
-CHANGES FROM v3.5:
-  - LEGAL: Reworked entire system prompt to remove "financial coach" / "financial
-    adviser" language. Grace is now positioned as a "behavioral insight engine" —
-    reflects patterns, never advises. Protects against regulatory exposure.
-  - Greeting already updated in v3.5 to "Your Personal Insight Engine."
+CHANGES FROM v3.6:
+  - NEW: Coaching style awareness. Reads user's preferred coaching_style from
+    UserProfile.preferences JSONB and injects tone directives into system prompt.
+  - NEW: COACHING_TONE_BLOCKS dict with encouraging/direct/balanced tone guidance.
+  - UPDATED: _build_user_context surfaces coaching style preference in context.
+  - UPDATED: chat_with_grace resolves coaching tone and prepends to system prompt.
 """
 
 import os
@@ -269,6 +270,44 @@ RISK_STYLE_LABELS = {
 }
 
 
+# ── Coaching Tone Blocks (v3.7) ──────────────────────────────────────────────
+# Injected into system prompt based on user's preferred coaching_style.
+# Read from UserProfile.preferences JSONB — no migration needed.
+
+COACHING_TONE_BLOCKS = {
+    "encouraging": """
+COACHING TONE — ENCOURAGING (user preference):
+- Lead with what's going well. Always find something to affirm first.
+- Frame challenges as opportunities. "You're building awareness" not "You overspent."
+- Use warm, motivational language. Celebrate every small win.
+- When surfacing tough patterns, sandwich between genuine encouragement.
+- Phrases to lean on: "That's real progress," "Look how far you've come," "This shows self-awareness."
+- Avoid anything that could feel like criticism. Reframe negatives as growth edges.
+- Still be honest — but wrap honesty in warmth.
+""",
+
+    "direct": """
+COACHING TONE — DIRECT (user preference):
+- Get to the point fast. No fluff, no padding.
+- State observations clearly. "Your expenses exceed your income by $400" not "It looks like things might be a bit tight."
+- Be honest about concerning patterns. Don't sugarcoat.
+- Still warm — direct is not harsh. Think trusted mentor, not drill sergeant.
+- Phrases to lean on: "Here's what I see," "The numbers tell a clear story," "Let's be real about this."
+- Skip excessive praise for basics. Save encouragement for genuine breakthroughs.
+- Respect the user's time — they want signal, not noise.
+""",
+
+    "balanced": """
+COACHING TONE — BALANCED (user preference):
+- Mix honesty with encouragement in equal measure.
+- Acknowledge reality, then highlight the path forward.
+- Be clear about patterns without being blunt or sugarcoating.
+- Phrases to lean on: "I notice," "That's worth exploring," "Here's what stands out."
+- Default tone: warm but substantive. Like a smart friend who cares enough to be real.
+""",
+}
+
+
 def _score_band(score: float) -> str:
     if score >= 80: return "Thriving"
     elif score >= 65: return "Strong"
@@ -281,8 +320,7 @@ def _score_band(score: float) -> str:
 def _build_user_context(db: Session, user_id) -> str:
     """
     Build live user context for Grace AI.
-    v3.5: Reads from UserProfile first (income, expenses, debt, goals, mission,
-    risk_style) with fallback to User model fields from onboarding.
+    v3.7: Now reads coaching_style from UserProfile.preferences JSONB.
     """
     context_parts = []
 
@@ -379,6 +417,15 @@ def _build_user_context(db: Session, user_id) -> str:
 
             if risk_style and risk_style in RISK_STYLE_LABELS:
                 context_parts.append(f"Risk tolerance: {RISK_STYLE_LABELS[risk_style]}")
+
+            # ── Coaching Style Preference (v3.7) ─────────────────────────
+            coaching_style = None
+            if profile and getattr(profile, "preferences", None):
+                prefs = profile.preferences if isinstance(profile.preferences, dict) else {}
+                coaching_style = prefs.get("coaching_style", None)
+
+            if coaching_style and coaching_style in COACHING_TONE_BLOCKS:
+                context_parts.append(f"User's preferred coaching style: {coaching_style}")
 
     except Exception:
         db.rollback()
@@ -487,11 +534,30 @@ def _build_user_context(db: Session, user_id) -> str:
     return ""
 
 
+def _resolve_coaching_tone(db: Session, user_id) -> str:
+    """
+    Resolve the user's coaching tone preference from profile.preferences JSONB.
+    Returns the tone block string to inject into the system prompt, or empty string.
+    v3.7: New helper to keep chat_with_grace clean.
+    """
+    try:
+        from app.models.profile import UserProfile
+        profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+        if profile and isinstance(getattr(profile, "preferences", None), dict):
+            style_key = profile.preferences.get("coaching_style", "balanced")
+            return COACHING_TONE_BLOCKS.get(style_key, "")
+    except Exception:
+        pass
+    return ""
+
+
 def chat_with_grace(db: Session, user, messages: list[dict]) -> dict:
     """
     Send a conversation to Claude with full platform knowledge + live user context.
     Now accepts user object directly for usage tracking.
     Returns dict with response text and usage info.
+
+    v3.7: Injects coaching tone block based on user's preference.
     """
     usage = check_ai_usage(db, user)
 
@@ -526,7 +592,10 @@ def chat_with_grace(db: Session, user, messages: list[dict]) -> dict:
     else:
         user_context = _build_user_context(db, user_id)
 
-    system_prompt = GRACE_SYSTEM_PROMPT + user_context + insight_block
+    # ── Resolve coaching tone (v3.7) ─────────────────────────────────────
+    coaching_tone = _resolve_coaching_tone(db, user_id)
+
+    system_prompt = GRACE_SYSTEM_PROMPT + coaching_tone + user_context + insight_block
 
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
