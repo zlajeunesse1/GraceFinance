@@ -1,7 +1,11 @@
 /**
- * SettingsPage — v7 Clean Complement to ProfilePage
- * Grace AI coaching style, notification scheduling, data exports,
- * session management, account deletion. Zero overlap with Profile.
+ * SettingsPage — v7.1 Unhinged Mode Support
+ * Grace AI coaching style (now with "Unhinged"), notification scheduling,
+ * data exports, session management, account deletion. Zero overlap with Profile.
+ *
+ * v7.1 CHANGES:
+ *   - Added "Unhinged" to COACHING_STYLES with warning description
+ *   - Added confirmation modal before activating unhinged mode
  */
 
 import { useState, useEffect } from "react"
@@ -9,13 +13,14 @@ import { useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import { useProfile } from "../hooks/useProfile"
 
-var C = { bg: "#000000", card: "#0a0a0a", card2: "#0d0d0d", border: "#1a1a1a", border2: "#222222", text: "#ffffff", muted: "#9ca3af", dim: "#6b7280", faint: "#4b5563", accent: "#c8b8ff", accentDim: "#8b7fc7", accentFaint: "rgba(200, 184, 255, 0.06)", green: "#34d399", red: "#ff4444", redDim: "#331111" }
+var C = { bg: "#000000", card: "#0a0a0a", card2: "#0d0d0d", border: "#1a1a1a", border2: "#222222", text: "#ffffff", muted: "#9ca3af", dim: "#6b7280", faint: "#4b5563", accent: "#c8b8ff", accentDim: "#8b7fc7", accentFaint: "rgba(200, 184, 255, 0.06)", green: "#34d399", red: "#ff4444", redDim: "#331111", warn: "#f59e0b", warnDim: "rgba(245, 158, 11, 0.08)", warnBorder: "rgba(245, 158, 11, 0.25)" }
 var FONT = "'Geist', 'SF Pro Display', -apple-system, sans-serif"
 
 var COACHING_STYLES = [
   { id: "encouraging", label: "Encouraging", desc: "Warm, supportive nudges that celebrate progress" },
   { id: "direct", label: "Direct", desc: "Straight talk, no fluff, action-oriented" },
-  { id: "balanced", label: "Balanced", desc: "A mix of honesty and encouragement" }
+  { id: "balanced", label: "Balanced", desc: "A mix of honesty and encouragement" },
+  { id: "unhinged", label: "Unhinged", desc: "Brutally honest, hilariously blunt, zero filter", badge: "NEW" }
 ]
 
 var REMINDER_TIMES = [
@@ -56,6 +61,48 @@ function Toast(props) {
     }}>
       <span style={{ fontSize: 14 }}>&#10003;</span>
       {props.message}
+    </div>
+  )
+}
+
+function UnhingedConfirmModal(props) {
+  if (!props.show) return null
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000,
+      background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 24, animation: "toastIn 0.2s ease"
+    }} onClick={props.onCancel}>
+      <div onClick={function (e) { e.stopPropagation() }} style={{
+        background: C.card, border: "1px solid " + C.border2, borderRadius: 14,
+        padding: 28, maxWidth: 400, width: "100%",
+        boxShadow: "0 16px 48px rgba(0,0,0,0.6)"
+      }}>
+        <div style={{ fontSize: 28, marginBottom: 12, textAlign: "center" }}>&#128293;</div>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: "0 0 8px", textAlign: "center", fontFamily: FONT }}>Enable Unhinged Mode?</h3>
+        <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.7, margin: "0 0 20px", textAlign: "center" }}>
+          Grace will be brutally honest, hilariously blunt, and hold absolutely nothing back. Same behavioral insights, zero filter on delivery. You can switch back anytime.
+        </p>
+        <p style={{ fontSize: 11, color: C.warn, lineHeight: 1.6, margin: "0 0 20px", textAlign: "center", padding: "10px 14px", background: C.warnDim, border: "1px solid " + C.warnBorder, borderRadius: 8 }}>
+          Grace will roast your spending habits. If you're not ready to laugh at yourself, maybe stick with Balanced.
+        </p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={props.onCancel} style={{
+            flex: 1, padding: "11px", borderRadius: 8, fontSize: 13, fontWeight: 500, fontFamily: FONT,
+            cursor: "pointer", background: "transparent", border: "1px solid " + C.border, color: C.dim, transition: "all 0.2s"
+          }}
+            onMouseEnter={function (e) { e.target.style.color = C.text; e.target.style.borderColor = C.faint }}
+            onMouseLeave={function (e) { e.target.style.color = C.dim; e.target.style.borderColor = C.border }}
+          >Nevermind</button>
+          <button onClick={props.onConfirm} style={{
+            flex: 1, padding: "11px", borderRadius: 8, fontSize: 13, fontWeight: 700, fontFamily: FONT,
+            cursor: "pointer", background: C.text, border: "none", color: C.bg, transition: "all 0.2s"
+          }}
+            onMouseEnter={function (e) { e.target.style.opacity = "0.85" }}
+            onMouseLeave={function (e) { e.target.style.opacity = "1" }}
+          >Let's Go</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -102,6 +149,9 @@ export default function SettingsPage() {
 
   /* Grace AI coaching style */
   var coachingStyleState = useState("balanced"); var coachingStyle = coachingStyleState[0]; var setCoachingStyle = coachingStyleState[1]
+
+  /* Unhinged confirmation modal */
+  var unhingedModalState = useState(false); var showUnhingedModal = unhingedModalState[0]; var setShowUnhingedModal = unhingedModalState[1]
 
   /* Notification prefs */
   var reminderState = useState(true); var dailyReminder = reminderState[0]; var setDailyReminder = reminderState[1]
@@ -185,8 +235,23 @@ export default function SettingsPage() {
   }
 
   function handleCoachingStyle(styleId) {
+    /* If selecting unhinged and not already on it, show confirmation */
+    if (styleId === "unhinged" && coachingStyle !== "unhinged") {
+      setShowUnhingedModal(true)
+      return
+    }
     setCoachingStyle(styleId)
     savePreference("coaching_style", styleId)
+  }
+
+  function confirmUnhinged() {
+    setShowUnhingedModal(false)
+    setCoachingStyle("unhinged")
+    savePreference("coaching_style", "unhinged")
+  }
+
+  function cancelUnhinged() {
+    setShowUnhingedModal(false)
   }
 
   function handleDeleteAccount() {
@@ -251,6 +316,7 @@ export default function SettingsPage() {
       <style>{"@import url('https://fonts.cdnfonts.com/css/geist');::placeholder{color:#6b7280!important}@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}"}</style>
 
       <Toast message={toastMsg} />
+      <UnhingedConfirmModal show={showUnhingedModal} onConfirm={confirmUnhinged} onCancel={cancelUnhinged} />
 
       <div style={{ width: "100%", maxWidth: 560 }}>
 
@@ -283,22 +349,28 @@ export default function SettingsPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {COACHING_STYLES.map(function (style) {
                 var isActive = coachingStyle === style.id
+                var isUnhinged = style.id === "unhinged"
                 return (
                   <button key={style.id} onClick={function () { handleCoachingStyle(style.id) }} style={{
                     padding: "14px 16px", borderRadius: 8, fontSize: 13, fontFamily: FONT,
-                    cursor: "pointer", background: isActive ? C.accentFaint : "transparent", textAlign: "left",
-                    border: "1px solid " + (isActive ? C.accentDim : C.border), color: isActive ? C.text : C.dim,
+                    cursor: "pointer", background: isActive ? (isUnhinged ? "rgba(245, 158, 11, 0.06)" : C.accentFaint) : "transparent", textAlign: "left",
+                    border: "1px solid " + (isActive ? (isUnhinged ? "rgba(245, 158, 11, 0.35)" : C.accentDim) : C.border), color: isActive ? C.text : C.dim,
                     transition: "all 0.2s", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center"
                   }}
                     onMouseEnter={function (e) { if (!isActive) { e.currentTarget.style.borderColor = C.faint; e.currentTarget.style.color = C.text } }}
                     onMouseLeave={function (e) { if (!isActive) { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.dim } }}
                   >
                     <div style={{ pointerEvents: "none" }}>
-                      <span style={{ fontWeight: isActive ? 600 : 500, display: "block", marginBottom: 2 }}>{style.label}</span>
+                      <span style={{ fontWeight: isActive ? 600 : 500, display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                        {style.label}
+                        {style.badge && (
+                          <span style={{ fontSize: 9, fontWeight: 700, color: isUnhinged && isActive ? "#f59e0b" : C.warn, background: isUnhinged && isActive ? "rgba(245, 158, 11, 0.15)" : "rgba(245, 158, 11, 0.1)", padding: "2px 6px", borderRadius: 4, letterSpacing: "0.05em" }}>{style.badge}</span>
+                        )}
+                      </span>
                       <span style={{ fontSize: 11, color: isActive ? C.muted : C.faint, fontWeight: 400 }}>{style.desc}</span>
                     </div>
                     {isActive && (
-                      <span style={{ fontSize: 11, color: C.accent, fontWeight: 600, flexShrink: 0, marginLeft: 12, pointerEvents: "none" }}>&#10003;</span>
+                      <span style={{ fontSize: 11, color: isUnhinged ? C.warn : C.accent, fontWeight: 600, flexShrink: 0, marginLeft: 12, pointerEvents: "none" }}>&#10003;</span>
                     )}
                   </button>
                 )
@@ -454,7 +526,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <p style={{ fontSize: 11, color: C.faint, textAlign: "center", marginTop: 24, opacity: mounted ? 1 : 0, transition: "opacity 0.4s ease 0.3s" }}>GraceFinance v7.0</p>
+        <p style={{ fontSize: 11, color: C.faint, textAlign: "center", marginTop: 24, opacity: mounted ? 1 : 0, transition: "opacity 0.4s ease 0.3s" }}>GraceFinance v7.1</p>
       </div>
     </div>
   )
