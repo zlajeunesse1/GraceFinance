@@ -2,14 +2,56 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="GraceFinance — Where Financial Confidence Is Measured" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#000000" />
+
+    <!-- iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Grace" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
     <link rel="icon" type="image/webp" href="/favicon.webp" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="GraceFinance — Smarter Finance is Right Around the Corner™" />
+
+    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+
     <title>GraceFinance</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Service Worker Registration -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+          navigator.serviceWorker.register("/sw.js").then(function (reg) {
+            console.log("[Grace] SW registered, scope:", reg.scope)
+
+            /* Auto-update: when a new SW is found, activate it */
+            reg.addEventListener("updatefound", function () {
+              var newWorker = reg.installing
+              if (newWorker) {
+                newWorker.addEventListener("statechange", function () {
+                  if (newWorker.state === "activated" && navigator.serviceWorker.controller) {
+                    console.log("[Grace] New version available — refreshing")
+                  }
+                })
+              }
+            })
+          }).catch(function (err) {
+            console.log("[Grace] SW registration failed:", err)
+          })
+        })
+      }
+    </script>
   </body>
 </html>
