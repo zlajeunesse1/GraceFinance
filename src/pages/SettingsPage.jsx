@@ -1,8 +1,10 @@
 /**
- * SettingsPage — v7.1 Unhinged Mode Support
+ * SettingsPage — v7.2 Dropdown Z-Index Fix
  * Grace AI coaching style (now with "Unhinged"), notification scheduling,
  * data exports, session management, account deletion. Zero overlap with Profile.
  *
+ * v7.2 CHANGES:
+ *   - Fixed time dropdown getting clipped by Your Data card below
  * v7.1 CHANGES:
  *   - Added "Unhinged" to COACHING_STYLES with warning description
  *   - Added confirmation modal before activating unhinged mode
@@ -380,7 +382,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Notifications ── */}
-        <div style={sectionStyle(0.1)}>
+        <div style={Object.assign({}, sectionStyle(0.1), { position: "relative", zIndex: 10 })}>
           <div style={cardStyle}>
             <div style={sectionLabel}>Notifications</div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: dailyReminder ? "1px solid " + C.border : "none" }}>
@@ -526,7 +528,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <p style={{ fontSize: 11, color: C.faint, textAlign: "center", marginTop: 24, opacity: mounted ? 1 : 0, transition: "opacity 0.4s ease 0.3s" }}>GraceFinance v7.1</p>
+        <p style={{ fontSize: 11, color: C.faint, textAlign: "center", marginTop: 24, opacity: mounted ? 1 : 0, transition: "opacity 0.4s ease 0.3s" }}>GraceFinance v7.2</p>
       </div>
     </div>
   )
