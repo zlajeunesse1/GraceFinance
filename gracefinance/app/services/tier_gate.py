@@ -14,6 +14,9 @@ Usage in any router:
     def export_checkins(user = Depends(get_current_user)):
         require_feature(user, "data_export_csv")  # raises 403 if Free
         ...
+
+v2 FIX: _user_tier now uses .value to extract string from SQLAlchemy Enum
+         instead of str() which returns "SubscriptionTier.PREMIUM".
 """
 
 from fastapi import HTTPException, status
@@ -22,7 +25,10 @@ from app.services.tier_config import has_feature, get_history_days, get_ai_limit
 
 def _user_tier(user) -> str:
     """Safely extract tier string from user object."""
-    return str(getattr(user, "subscription_tier", "free") or "free").lower()
+    tier = getattr(user, "subscription_tier", None) or "free"
+    if hasattr(tier, "value"):
+        return tier.value.lower()
+    return str(tier).lower()
 
 
 def require_feature(user, feature: str) -> None:
