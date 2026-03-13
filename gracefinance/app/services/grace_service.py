@@ -26,8 +26,10 @@ try:
     )
     from app.services.behavioral_engine import UserProfileBuilder
     HAS_ENGINE = True
-except ImportError:
+except Exception as e:
     HAS_ENGINE = False
+    import logging
+    logging.getLogger("gracefinance").error(f"Behavioral engine failed to load: {e}", exc_info=True)
 
 
 # ── Timezone anchor — matches check-in system ────────────────────────────────
