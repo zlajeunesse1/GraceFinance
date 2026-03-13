@@ -14,8 +14,11 @@ v6: Added financial snapshot sync (income, expenses, debt, goals, mission).
     Profile fields sync back to User model so legacy reads still work.
     Added DELETE /account for permanent account deletion.
     Onboarding data seeds profile on first access.
+
+v7: Hardened delete_account with explicit child table cleanup.
 """
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,9 +26,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.profile import UserProfile
-from app.models.models import User
+from app.models.models import User, Debt, Transaction, Bill
+from app.models.checkin import CheckInResponse, UserMetricSnapshot
 from app.schemas.profile import ProfileRead, ProfileUpdate
 from app.services.auth import get_current_user
+
+logger = logging.getLogger("gracefinance")
 
 router = APIRouter(prefix="/api/profile", tags=["Profile"])
 
@@ -163,10 +169,23 @@ def delete_account(
 ):
     """
     Permanently delete the user's account and ALL associated data.
-    CASCADE on foreign keys handles: profile, checkins, snapshots, debts,
-    transactions, bills. This is irreversible.
+    Explicit child-table cleanup + CASCADE as backup.
+    This is irreversible.
     """
     try:
+        user_id = current_user.id
+
+        # ── Explicit child cleanup (safety net for missing DB-level CASCADE) ──
+        db.query(CheckInResponse).filter(CheckInResponse.user_id == user_id).delete(synchronize_session=False)
+        db.query(UserMetricSnapshot).filter(UserMetricSnapshot.user_id == user_id).delete(synchronize_session=False)
+        db.query(Debt).filter(Debt.user_id == user_id).delete(synchronize_session=False)
+        db.query(Transaction).filter(Transaction.user_id == user_id).delete(synchronize_session=False)
+        db.query(Bill).filter(Bill.user_id == user_id).delete(synchronize_session=False)
+
+        # Profile (1:1)
+        db.query(UserProfile).filter(UserProfile.user_id == user_id).delete(synchronize_session=False)
+
+        # ── Delete the user row itself ──
         db.delete(current_user)
         db.commit()
 
@@ -174,8 +193,9 @@ def delete_account(
             "status": "deleted",
             "message": "Your account and all data have been permanently deleted.",
         }
-    except Exception:
+    except Exception as e:
         db.rollback()
+        logger.error(f"Account deletion failed for user {current_user.id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="Failed to delete account. Please try again or contact support.",
