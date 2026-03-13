@@ -53,15 +53,16 @@ function Toggle(props) {
 
 function Toast(props) {
   if (!props.message) return null
+  var isWarn = props.type === "warn"
   return (
     <div style={{
       position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)",
-      background: C.card2, border: "1px solid " + C.border2, borderRadius: 10,
-      padding: "12px 20px", fontSize: 13, color: C.green, fontFamily: FONT,
+      background: C.card2, border: "1px solid " + (isWarn ? C.warnBorder : C.border2), borderRadius: 10,
+      padding: "12px 20px", fontSize: 13, color: isWarn ? C.warn : C.green, fontFamily: FONT,
       fontWeight: 500, zIndex: 9999, display: "flex", alignItems: "center", gap: 8,
       boxShadow: "0 8px 32px rgba(0,0,0,0.5)", animation: "toastIn 0.3s ease"
     }}>
-      <span style={{ fontSize: 14 }}>&#10003;</span>
+      <span style={{ fontSize: 14 }}>{isWarn ? "\u26A1" : "\u2713"}</span>
       {props.message}
     </div>
   )
@@ -109,13 +110,16 @@ function UnhingedConfirmModal(props) {
   )
 }
 
-function downloadCSV(endpoint, fallbackFilename, setLoading) {
+function downloadCSV(endpoint, fallbackFilename, setLoading, onUpgradeNeeded) {
   setLoading(true)
   var token = localStorage.getItem("grace_token")
   fetch(API_BASE + "/api/export/" + endpoint, {
     headers: { Authorization: "Bearer " + token },
   })
     .then(function (res) {
+      if (res.status === 403) {
+        throw new Error("upgrade_needed")
+      }
       if (!res.ok) throw new Error("Export failed (" + res.status + ")")
       var disposition = res.headers.get("Content-Disposition")
       var filename = fallbackFilename
@@ -136,6 +140,10 @@ function downloadCSV(endpoint, fallbackFilename, setLoading) {
       window.URL.revokeObjectURL(url)
     })
     .catch(function (err) {
+      if (err.message === "upgrade_needed") {
+        if (onUpgradeNeeded) onUpgradeNeeded()
+        return
+      }
       console.error("Export error:", err)
       alert("Export failed. Please try again.")
     })
@@ -172,6 +180,7 @@ export default function SettingsPage() {
 
   /* Toast */
   var toastState = useState(""); var toastMsg = toastState[0]; var setToastMsg = toastState[1]
+  var toastTypeState = useState(""); var toastType = toastTypeState[0]; var setToastType = toastTypeState[1]
 
   /* Animation */
   var mountedState = useState(false); var mounted = mountedState[0]; var setMounted = mountedState[1]
@@ -204,9 +213,10 @@ export default function SettingsPage() {
     return function () { document.removeEventListener("click", handleClick) }
   }, [timeDropdownOpen])
 
-  function showToast(msg) {
+  function showToast(msg, type) {
     setToastMsg(msg)
-    setTimeout(function () { setToastMsg("") }, 2400)
+    setToastType(type || "")
+    setTimeout(function () { setToastMsg(""); setToastType("") }, 2400)
   }
 
   function savePreference(key, value) {
@@ -317,7 +327,7 @@ export default function SettingsPage() {
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT, display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 24px" }}>
       <style>{"@import url('https://fonts.cdnfonts.com/css/geist');::placeholder{color:#6b7280!important}@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}"}</style>
 
-      <Toast message={toastMsg} />
+      <Toast message={toastMsg} type={toastType} />
       <UnhingedConfirmModal show={showUnhingedModal} onConfirm={confirmUnhinged} onCancel={cancelUnhinged} />
 
       <div style={{ width: "100%", maxWidth: 560 }}>
@@ -446,11 +456,11 @@ export default function SettingsPage() {
               Your data belongs to you. Export it anytime.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <button disabled={exportingCheckins} onClick={function () { downloadCSV("checkins", "gracefinance_checkins.csv", setExportingCheckins) }} style={exportBtnStyle(exportingCheckins)}
+              <button disabled={exportingCheckins} onClick={function () { downloadCSV("checkins", "gracefinance_checkins.csv", setExportingCheckins, function () { showToast("Upgrade to Pro to export your data", "warn"); setTimeout(function () { navigate("/pricing") }, 1800) }) }} style={exportBtnStyle(exportingCheckins)}
                 onMouseEnter={function (e) { if (!exportingCheckins) { e.target.style.color = C.text; e.target.style.borderColor = C.faint } }}
                 onMouseLeave={function (e) { if (!exportingCheckins) { e.target.style.color = C.dim; e.target.style.borderColor = C.border } }}
               >{exportingCheckins ? "Exporting..." : "Export check-in history (CSV)"}</button>
-              <button disabled={exportingFCS} onClick={function () { downloadCSV("fcs-trend", "gracefinance_fcs_trend.csv", setExportingFCS) }} style={exportBtnStyle(exportingFCS)}
+              <button disabled={exportingFCS} onClick={function () { downloadCSV("fcs-trend", "gracefinance_fcs_trend.csv", setExportingFCS, function () { showToast("Upgrade to Pro to export your data", "warn"); setTimeout(function () { navigate("/pricing") }, 1800) }) }} style={exportBtnStyle(exportingFCS)}
                 onMouseEnter={function (e) { if (!exportingFCS) { e.target.style.color = C.text; e.target.style.borderColor = C.faint } }}
                 onMouseLeave={function (e) { if (!exportingFCS) { e.target.style.color = C.dim; e.target.style.borderColor = C.border } }}
               >{exportingFCS ? "Exporting..." : "Export FCS trend data (CSV)"}</button>
@@ -528,7 +538,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <p style={{ fontSize: 11, color: C.faint, textAlign: "center", marginTop: 24, opacity: mounted ? 1 : 0, transition: "opacity 0.4s ease 0.3s" }}>GraceFinance v7.2</p>
+        <p style={{ fontSize: 11, color: C.faint, textAlign: "center", marginTop: 24, opacity: mounted ? 1 : 0, transition: "opacity 0.4s ease 0.3s" }}>GraceFinance v7.3</p>
       </div>
     </div>
   )
